@@ -53,6 +53,7 @@ az storage container create --n scripts \
 
 # # Create a File Share to be mounted
 az storage share create -n clouddrive \
+    --quota 1 \
     --account-name ${AZURE_STORAGE_ACCOUNT} \
     --account-key ${AZURE_STORAGE_KEY}
 

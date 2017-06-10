@@ -1,10 +1,12 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Copyright (c) 2017, cloudcodeit.com
+#
+#  Purpose: Install a VM Ready to act as an Ansible Control
+#  Usage:
+#    install.sh <unique> <location> <vm_name>
+#
 
-if [ -z "$1" ]
-  then
-    echo '$1 Unique string Argument required.'
-    exit 1
-fi
+if [ -z "$1" ]; then echo '$1 Unique string Argument required.'; exit 1; fi
 
 
 ###############################
@@ -14,13 +16,12 @@ fi
 # Set Environment Variables
 UNIQUE=$1
 DATE=$(date "+%Y-%m-%d-%H-%M-%S")
-AZURE_LOCATION=southcentralus
 AZURE_GROUP=${UNIQUE}-ansible
 AZURE_STORAGE_ACCOUNT=${UNIQUE}ansiblestorage
-AZURE_VM=Control
 AZURE_KEYVAULT=${UNIQUE}ansiblevault
 CUSTOM_SCRIPT=azure-cli.sh
-
+if [ ! -z $2 ]; then AZURE_LOCATION=$2; else AZURE_LOCATION=southcentralus; fi
+if [ ! -z $3 ]; then AZURE_VM=$3; else AZURE_VM=Control; fi
 
 ###############################
 ## Create Virtual Machine    ##
@@ -51,9 +52,9 @@ az storage container create --n scripts \
   --public-access off
 
 # # Create a File Share to be mounted
-# az storage share create -n scripts \
-#     --account-name ${AZURE_STORAGE_ACCOUNT} \
-#     --account-key ${AZURE_STORAGE_KEY}
+az storage share create -n clouddrive \
+    --account-name ${AZURE_STORAGE_ACCOUNT} \
+    --account-key ${AZURE_STORAGE_KEY}
 
 # Create the Virtual Machine
 tput setaf 1; echo 'Creating a Virtual Machine...' ; tput sgr0

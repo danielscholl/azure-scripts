@@ -1,4 +1,5 @@
 #!/bin/bash
+# Copyright (c) 2017, cloudcodeit.com
 
 ## This Script will do an upgrade of packages over Azure Custom Script Extensions
 #   NOTE: walinuxagent upgrades will hang the Custom Script from running and needs to be ignored

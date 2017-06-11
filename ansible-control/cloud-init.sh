@@ -1,5 +1,5 @@
 #!/bin/sh
-
+# Copyright (c) 2017, cloudcodeit.com
 ## This Script will install
 # - Support for SMB 3.0 File Share Mounts
 # - Ansible

@@ -1,4 +1,5 @@
 #!/bin/bash
+# Copyright (c) 2017, cloudcodeit.com
 
 if [ -z "$1" ]
   then

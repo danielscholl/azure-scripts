@@ -1,3 +1,4 @@
+// Copyright(c) 2017, cloudcodeit.com
 module.exports = (context, data) => {
   const parsedForm = parseQuery(data.form);
   context.log(parsedForm);

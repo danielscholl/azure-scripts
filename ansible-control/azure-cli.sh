@@ -1,4 +1,5 @@
 #!/bin/sh
+# Copyright (c) 2017, cloudcodeit.com
 
 ## This Script will install
 # - Azure CLI 2.0

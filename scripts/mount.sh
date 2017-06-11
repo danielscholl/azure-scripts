@@ -20,12 +20,6 @@ if [ -z $SHARE ]; then SHARE=clouddrive; fi
 if [ -z $AZURE_STORAGE_ACCOUNT ]; then echo 'Argument not Found: AZURE_STORAGE_ACCOUNT'; exit; fi
 if [ -z $AZURE_STORAGE_KEY ]; then echo 'Argument not Found: AZURE_STORAGE_KEY'; exit; fi
 
-# Debug
-echo ${SHARE}
-echo ${AZURE_STORAGE_ACCOUNT}
-echo ${AZURE_STORAGE_KEY}
-exit
-
 # Locally mount the file share
 if [ ! -d "/mnt/${SHARE}" ]; then
   mkdir "/mnt/${SHARE}"

@@ -9,13 +9,14 @@
    ./Create-VirtualMachine.ps1 <your_unique_string> <location> <vmname>
 #>
 
-param([string]$unique = $(throw "Unique Parameter required."), 
+param([string]$unique = $(throw "Unique Parameter required."),
   [string]$location = "southcentralus",
   [string]$name = "control",
   [string]$rgName = "$($unique)-$($name)")
 
 #Global Variables
-$image = "MicrosoftWindowsServer:WindowsServer:2012-R2-Datacenter:latest"
+$image = "MicrosoftVisualStudio:VisualStudio:VS-2017-Comm-v152-Win10-N:latest"
+# $image = "MicrosoftWindowsServer:WindowsServer:2012-R2-Datacenter:latest"
 $vmSize = "Standard_A1"
 # $date = Get-Date -format "yyyy-MM-dd-hh-mm-ss"
 
@@ -92,6 +93,6 @@ $vm = Set-AzureRmVMOSDisk -VM $vm `
 
 New-AzureRmVM -VM $vm `
   -ResourceGroupName $rgname `
-  -Location $location 
+  -Location $location
 
 Get-AzureRmVM -ResourceGroupName $rgName

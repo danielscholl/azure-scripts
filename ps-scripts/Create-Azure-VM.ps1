@@ -16,23 +16,24 @@ param([string]$Prefix = $(throw "Unique Parameter required."),
 
 
 ## SET OS TYPE  LINUX/WINDOWS
-$OS = "LINUX" 
+$OS = "WINDOWS" 
 
 If ($OS -eq "LINUX") {
   $Publisher = "Canonical"
   $Offer = "UbuntuServer"
   $SKU = "16.04-LTS"
   $Version = "latest"
-  $PORT = 22
   $PORT_NAME = "SSH"
+  $PORT = 22
 }
 else {
+  #MicrosoftWindowsServer:WindowsServer:2012-R2-Datacenter:4.127.20170510
   $Publisher = "MicrosoftWindowsServer"
   $Offer = "WindowsServer"
-  $SKU = "2012R2DataCenter"
+  $SKU = "2012-R2-Datacenter"
   $Version = "4.127.20170510"
-  $PORT = 3389
   $PORT_NAME = "RDP"
+  $PORT = 3389
 }
 
 ## SETUP VARIABLES

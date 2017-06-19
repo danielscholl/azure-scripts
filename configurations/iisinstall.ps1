@@ -1,4 +1,4 @@
-configuration Main {
+configuration IISInstall {
   node "localhost"
   {
     WindowsFeature IIS

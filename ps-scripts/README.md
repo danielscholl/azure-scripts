@@ -205,7 +205,7 @@ New-AzureStorageBlobSASToken -Context $Context `
 #### DSC File to install IIS
 
 ```powershell
-configuration Main
+configuration IISInstall
 {
     node "localhost"
     {
@@ -228,6 +228,47 @@ configuration Main
 
 3. Version
   > ie:  2.21
+
+#### Run a DSC Configuration on a Windows Server
+
+1. Create a Powershell DSC File
+
+```powershell
+configuration IISInstall
+{
+    node "localhost"
+    {
+        WindowsFeature IIS
+        {
+            Ensure = "Present"
+            Name = "Web-Server"
+        }
+    }
+}
+```
+
+2. Upload the DSC to Storage and Execute on the Server
+
+```powershell
+$ResourceGroup = "ds-533"
+$Name = "vm1"
+$Storage = "ds533disks"
+
+#Publish the configuration script into user storage
+Publish-AzureRmVMDscConfiguration -ConfigurationPath .\iisinstall.ps1 `
+    -ResourceGroupName $ResourceGroup `
+    -StorageAccountName $Storage `
+    -force
+
+#Set the VM to run the DSC configuration
+Set-AzureRmVmDscExtension -Version 2.21 `
+    -ResourceGroupName $ResourceGroup `
+    -VMName $Name `
+    -ArchiveStorageAccountName $Storage `
+    -ArchiveBlobName iisInstall.ps1.zip `
+    -AutoUpdate:$true `
+    -ConfigurationName "IISInstall"
+```
 
 
 #### Resize a Virtual Machine

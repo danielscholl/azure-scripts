@@ -1,0 +1,161 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "storageAccountType": {
+      "type": "string",
+      "defaultValue": "Standard_LRS",
+      "allowedValues": [
+        "Standard_LRS",
+        "Standard_GRS",
+        "Standard_ZRS",
+        "Premium_LRS"
+      ],
+      "metadata": {
+        "description": "Storage Account type"
+      }
+    },
+    "uniquePrefix": {
+      "type": "string",
+      "defaultValue": "abc",
+      "metadata": {
+        "description": "A unique prefix string"
+      }
+    },
+    "linuxName": {
+      "type": "string",
+      "defaultValue": "Control",
+      "metadata": {
+        "description": "Linux VM Server Name"
+      }
+    }
+  },
+  "variables": {
+    "CommonName": "[concat(toLower(parameters('uniquePrefix')), toLower(resourceGroup().name))]",
+    "StorageName": "[concat(variables('CommonName'), 'storage')]",
+    "DiagnosticsName": "[concat(variables('CommonName'), 'diagnostics')]",
+    "NetworkSecurityGroupName": "[concat(parameters('linuxName'), '-nsg')]",
+    "VNetName": "[concat(variables('CommonName'), 'VNet')]",
+    "VNetId": "[resourceId('Microsoft.Network/virtualNetworks', variables('VNetName'))]",
+    "SubnetRef": "[concat(variables('VnetID'), '/subnets/', 'subnet')]"
+  },
+  "resources": [
+    {
+      "name": "[variables('StorageName')]",
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2016-01-01",
+      "location": "[resourceGroup().location]",
+      "sku": {
+        "name": "[parameters('storageAccountType')]"
+      },
+      "kind": "Storage",
+      "tags": {
+        "displayName": "[variables('StorageName')]"
+      },
+      "properties": {}
+    },
+    {
+      "name": "[variables('DiagnosticsName')]",
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2016-01-01",
+      "location": "[resourceGroup().location]",
+      "sku": {
+        "name": "[parameters('storageAccountType')]"
+      },
+      "kind": "Storage",
+      "tags": {
+        "displayName": "[variables('DiagnosticsName')]"
+      },
+      "properties": {}
+    },
+    {
+      "name": "[variables('NetworkSecurityGroupName')]",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2016-03-30",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "[variables('NetworkSecurityGroupName')]"
+      },
+      "properties": {
+        "securityRules": [
+          {
+            "name": "enable_rdp_rule",
+            "properties": {
+              "description": "Allow RDP",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "3389",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 110,
+              "direction": "Inbound"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[concat(variables('CommonName'), 'VNet')]",
+      "type": "Microsoft.Network/virtualNetworks",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-06-15",
+      "dependsOn": [],
+      "tags": {
+        "displayName": "[concat(variables('CommonName'), 'VNet')]"
+      },
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "10.0.0.0/16"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "Subnet",
+            "properties": {
+              "addressPrefix": "10.0.0.0/24"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[concat(parameters('linuxName'), '-ip')]",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "apiVersion": "2015-06-15",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "[concat(parameters('linuxName'), '-ip')]"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Dynamic"
+      }
+    },
+    {
+      "name": "[concat(parameters('linuxName'), '-nic')]",
+      "type": "Microsoft.Network/networkInterfaces",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-06-15",
+      "dependsOn": [
+        "[concat('Microsoft.Network/virtualNetworks/', variables('VNetName'))]"
+      ],
+      "tags": {
+        "displayName": "[concat(parameters('linuxName'), '-nic')]"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[concat(variables('VnetID'), '/subnets/', 'subnet')]"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -205,7 +205,7 @@ New-AzureStorageBlobSASToken -Context $Context `
 #### DSC File to install IIS
 
 ```powershell
-configuration IISInstall
+configuration Main
 {
     node "localhost"
     {
@@ -217,6 +217,18 @@ configuration IISInstall
     }
 }
 ```
+
+** Install Via Portal **
+
+1. Configuration Module or Script
+  > ie: dsc.zip
+
+2. Module-qualified Name of Configuration
+  > ie:  dsc_iis.ps1\Main
+
+3. Version
+  > ie:  2.21
+
 
 #### Resize a Virtual Machine
 
@@ -230,6 +242,23 @@ $vm.HardwareProfile.vmSize = $NewVMSize
 Update-AzureRmVM -ResourceGroupName $ResourceGroupName -VM $vm
 ```
 
+#### Add a Disk to a Windows Virtual Machine
+
+```powershell
+$ResourceGroup = "ds533"
+$Name = "VM1"
+$VM = Get-AzureRmVM -ResourceGroupName $ResourceGroup -Name $Name
+
+$Storage = "ds533disks"
+$DiskName = "vm1data.vhd"
+Add-AzureRmVMDataDisk -VM $VM -Name "data" `
+    -VhdUri "https://$Storage.blob.core.windows.net/vhds/$DiskName" `
+    -CreateOption Empty `
+    -DiskSizeinGB 1 `
+    -Lun 2
+
+Update-AzureRmVM -ResourceGroupName $ResourceGroup -VM $VM
+```
 
 
 #### Command to install IIS as a Windows Feature

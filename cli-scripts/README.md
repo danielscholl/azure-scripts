@@ -1,5 +1,37 @@
 # Helpful Azure CLI Snippets
 
+
+### Configure a Local Git Web Deployment
+
+```bash
+ResourceGroup=ds-533-web
+Location=southcentralus
+
+# Create a resource group.
+az group create --name ${ResourceGroup} \
+  --location ${Location}
+
+# Create an App Service plan in FREE tier.
+Plan=ds-533-web-plan
+az appservice plan create --name ${Plan} \
+  --resource-group ${ResourceGroup} \
+  --sku FREE
+
+# Create a web app.
+WebApp=ds-533-web
+az webapp create --name ${WebApp} \
+  --resource-group ${ResourceGroup} \
+  --plan ${Plan}
+
+# Set the account-level deployment credentials if needed
+UserName=devops
+az webapp deployment user set --user-name ${UserName}
+
+# Configure local Git and get deployment URL
+url=$(az webapp deployment source config-local-git --name ${WebApp} \
+--resource-group myResourceGroup --query url --output tsv)
+```
+
 ### Linux App Service App Using Docker
 
 ```bash

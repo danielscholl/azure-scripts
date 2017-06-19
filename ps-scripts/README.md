@@ -265,7 +265,7 @@ Set-AzureRmVmDscExtension -Version 2.21 `
     -ResourceGroupName $ResourceGroup `
     -VMName $Name `
     -ArchiveStorageAccountName $Storage `
-    -ArchiveBlobName iisInstall.ps1.zip `
+    -ArchiveBlobName iisinstall.ps1.zip `
     -AutoUpdate:$true `
     -ConfigurationName "IISInstall"
 ```

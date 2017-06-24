@@ -301,17 +301,31 @@ Add-AzureRmVMDataDisk -VM $VM -Name "data" `
 Update-AzureRmVM -ResourceGroupName $ResourceGroup -VM $VM
 ```
 
-
-#### Command to install IIS as a Windows Feature
+#### Lock a Resource
 
 ```powershell
-Install-WindowsFeature -Name "Web-Server" -IncludeAllSubFeature -IncludeManagementTools
+$ResourceGroup = "ds-533"
+$Storage = "ds533disks"
+
+New-AzureRmResourceLock -LockName "DoNotDelete" -LockLevel CanNotDelete `
+  -ResourceGroupName $ResourceGroup `
+  -ResourceName $Storage `
+  -ResourceType microsoft.storage/storageaccounts
 ```
+>Note: Must run as Administrator
+
+
 
 #### Install the BGInfo Extension
 
 ```powershell
 Set-AzureRmVMBginfoExtension -resourcegroup "proddata" -vmname "web2"
+```
+
+#### Manually install IIS as a Windows Feature from within a server
+
+```powershell
+Install-WindowsFeature -Name "Web-Server" -IncludeAllSubFeature -IncludeManagementTools
 ```
 
 #### Create a VMSS

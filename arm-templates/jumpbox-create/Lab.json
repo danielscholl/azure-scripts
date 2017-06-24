@@ -36,8 +36,7 @@
     "DiagnosticsName": "[concat(variables('CommonName'), 'diagnostics')]",
     "NetworkSecurityGroupName": "[concat(parameters('linuxName'), '-nsg')]",
     "VNetName": "[concat(variables('CommonName'), 'VNet')]",
-    "VNetId": "[resourceId('Microsoft.Network/virtualNetworks', variables('VNetName'))]",
-    "SubnetRef": "[concat(variables('VnetID'), '/subnets/', 'subnet')]"
+    "VNetId": "[resourceId('Microsoft.Network/virtualNetworks', variables('VNetName'))]"
   },
   "resources": [
     {

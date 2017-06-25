@@ -75,19 +75,49 @@ $GatewaySub = Get-AzureRmVirtualNetworkSubnetConfig -Name 'GatewaySubnet' `
     -VirtualNetwork $VNet
 
 
+
+
 # ------------------------------------
 # Configure a Point to Site Connection
 # ------------------------------------
-$FullPath = "C:\Certs\P2SRootCert.cer"
-$CertName = 'P2SRootCert.cer'
+$FullPath = "C:\Certs\CloudCodeIt.cer"
+$CertName = 'CloudCodeIt.cer'
 
-# Create a self-signed root certificate
-$cert = New-SelfSignedCertificate -Type Custom -KeySpec Signature `
--Subject "CN=P2SRootCert" -KeyExportPolicy Exportable `
--HashAlgorithm sha256 -KeyLength 2048 `
--CertStoreLocation "Cert:\CurrentUser\My" -KeyUsageProperty Sign -KeyUsage CertSign
+# Create a root certificate
+$CERT = New-SelfSignedCertificate -Type Custom `
+    -Subject "CN=CloudCodeIt" `
+    -HashAlgorithm sha256 `
+    -KeySpec Signature `
+    -KeyLength 2048 `
+    -KeyExportPolicy Exportable `
+    -KeyUsageProperty Sign `
+    -KeyUsage CertSign `
+    -CertStoreLocation "Cert:\CurrentUser\My" 
 
-# NOTE: Manually export to C:\Certs\P2SRootCert.cer
+
+# Get Certificate from thumbprint (Option).
+# NOTE: Manually copy in thumprint
+Get-ChildItem -Path “Cert:\CurrentUser\My”
+$CERT = Get-ChildItem -Path "Cert:\CurrentUser\My\0C8CC3B873D5AE578C3A3748E231FD72189A78F1"
+
+# Create a Client Certificate
+New-SelfSignedCertificate -Type Custom `
+    -Subject "CN=CloudCodeItClient" `
+    -HashAlgorithm sha256 `
+    -KeySpec Signature `
+    -KeyLength 2048 `
+    -KeyExportPolicy Exportable `
+    -Signer $CERT `
+    -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.2") `
+    -CertStoreLocation "Cert:\CurrentUser\My"
+ 
+# Manually export the Certificate to C:\Certs\
+
+
+# Option 2 Using MakeCert
+C:\certs\makecert.exe -n "CN=CloudCodeIt" -pe -sky exchange -a sha1 -r -len 2048 -ss My
+C:\certs\makecert.exe -n "CN=CloudCodeIt" -pe -sky exchange -a sha1 -m 96 -ss My -in "CloudCodeIt" -is my 
+
 
 # Get Certificate for Import
 $Cert = new-object System.Security.Cryptography.X509Certificates.X509Certificate2($FullPath)

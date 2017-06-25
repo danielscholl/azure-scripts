@@ -43,6 +43,67 @@ New-AzureRmResourceGroup -Name $ResourceGroup `
 Find-AzureRmResource -ResourceGroupNameContains $ResourceGroup | Select-Object Name, Kind
 ```
 
+### Virtual Networks
+
+```powershell
+# Setup Variables
+$VNetName  = 'DefaultVNet'
+$VNetPrefix = '10.1.0.0/16'
+
+$GatewayName = 'Gateway'
+$GatewayPrefix = '10.0.0.0/28'
+$Subnet1Name = 'Subnet'
+$Subnet1Prefix = '10.1.0.0/24'
+
+
+# Create a Simple Virtual Network (Option 1)
+$Subnet = New-AzureRmVirtualNetworkSubnetConfig -Name $Subnet1Name `
+    -AddressPrefix $Subnet1Prefix
+
+New-AzureRmVirtualNetwork -Name $VNetName `
+    -ResourceGroupName $ResourceGroup `
+    -Location $Location `
+    -AddressPrefix $VNetPrefix `
+    -Subnet $Subnet
+
+# Create a Network with a Gateway Subnet
+$Subnet = New-AzureRmVirtualNetworkSubnetConfig -Name $Subnet1Name `
+    -AddressPrefix $Subnet1Prefix
+$GatewaySub = New-AzureRmVirtualNetworkSubnetConfig -Name $GatewayName `
+    -AddressPrefix $GatewayPrefix
+
+New-AzureRmVirtualNetwork -Name $VNetName `
+    -ResourceGroupName $ResourceGroup `
+    -Location $Location `
+    -AddressPrefix $VNetPrefix,$GatewayPrefix `
+    -Subnet $Subnet,$GatewaySub
+
+
+# Get a Virtual Network and Subnet
+$VNet = Get-AzureRmVirtualNetwork -Name $VNetName `
+    -ResourceGroupName $ResourceGroup
+$GatewaySub = Get-AzureRmVirtualNetworkSubnetConfig -Name $GatewayName `
+    -VirtualNetwork $VNet
+
+# Delete a Virtual Network
+Remove-AzureRmVirtualNetwork -Name $VNetName `
+    -ResourceGroupName $ResourceGroup
+
+# Create a Public IP Address
+$IpName = 'gw-ip'
+
+$PubliIp = New-AzureRmPublicIpAddress -Name $IpName `
+    -ResourceGroupName $ResourceGroup `
+    -Location $Location `
+    -AllocationMethod Dynamic
+
+
+# Create a Virtual Gateway
+$IpConf = New-AzureRmVirtualNetworkGatewayIpConfig -Name $GatewayName `
+    -Subnet $GatewaySub `
+    -PublicIpAddress $PublicIp
+````
+
 ### Storage Accounts and Containers
 
 ```powershell

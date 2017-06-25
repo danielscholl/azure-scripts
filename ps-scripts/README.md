@@ -46,7 +46,6 @@ Find-AzureRmResource -ResourceGroupNameContains $ResourceGroup | Select-Object N
 ### Virtual Networks
 
 ```powershell
-# Create Subnets
 $VNetName  = 'DefaultVNet'
 $VNetPrefix = '10.10.0.0/16'
 $GatewayPrefix = '192.168.200.0/29'
@@ -54,10 +53,12 @@ $GatewayPrefix = '192.168.200.0/29'
 $Subnet1Name = 'Subnet'
 $Subnet1Prefix = '10.10.1.0/24'
 
+# Create Subnets
 $GatewaySub = New-AzureRmVirtualNetworkSubnetConfig -Name 'GatewaySubnet' `
     -AddressPrefix $GatewayPrefix
 $Subnet = New-AzureRmVirtualNetworkSubnetConfig -Name $Subnet1Name `
     -AddressPrefix $Subnet1Prefix
+
 
 # Create a Virtual Network
 $VNet = New-AzureRmVirtualNetwork -Name $VNetName `
@@ -86,9 +87,7 @@ $cert = New-SelfSignedCertificate -Type Custom -KeySpec Signature `
 -HashAlgorithm sha256 -KeyLength 2048 `
 -CertStoreLocation "Cert:\CurrentUser\My" -KeyUsageProperty Sign -KeyUsage CertSign
 
-
 # NOTE: Manually export to C:\Certs\P2SRootCert.cer
-
 
 # Get Certificate for Import
 $Cert = new-object System.Security.Cryptography.X509Certificates.X509Certificate2($FullPath)

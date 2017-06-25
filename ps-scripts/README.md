@@ -50,7 +50,6 @@ Find-AzureRmResource -ResourceGroupNameContains $ResourceGroup | Select-Object N
 $VNetName  = 'DefaultVNet'
 $VNetPrefix = '10.1.0.0/16'
 
-$GatewayName = 'Gateway'
 $GatewayPrefix = '10.0.0.0/28'
 $Subnet1Name = 'Subnet'
 $Subnet1Prefix = '10.1.0.0/24'
@@ -59,19 +58,17 @@ $Subnet1Prefix = '10.1.0.0/24'
 # Create a Simple Virtual Network (Option 1)
 $Subnet = New-AzureRmVirtualNetworkSubnetConfig -Name $Subnet1Name `
     -AddressPrefix $Subnet1Prefix
+$GatewaySub = New-AzureRmVirtualNetworkSubnetConfig -Name 'GatewaySubnet' `
+    -AddressPrefix $GatewayPrefix
 
+# Create a Single Subnet Network (Option 1)
 New-AzureRmVirtualNetwork -Name $VNetName `
     -ResourceGroupName $ResourceGroup `
     -Location $Location `
     -AddressPrefix $VNetPrefix `
     -Subnet $Subnet
 
-# Create a Network with a Gateway Subnet
-$Subnet = New-AzureRmVirtualNetworkSubnetConfig -Name $Subnet1Name `
-    -AddressPrefix $Subnet1Prefix
-$GatewaySub = New-AzureRmVirtualNetworkSubnetConfig -Name $GatewayName `
-    -AddressPrefix $GatewayPrefix
-
+# Create a Network with a Gateway Subnet (Option 2)
 New-AzureRmVirtualNetwork -Name $VNetName `
     -ResourceGroupName $ResourceGroup `
     -Location $Location `
@@ -85,23 +82,55 @@ $VNet = Get-AzureRmVirtualNetwork -Name $VNetName `
 $GatewaySub = Get-AzureRmVirtualNetworkSubnetConfig -Name $GatewayName `
     -VirtualNetwork $VNet
 
+
 # Delete a Virtual Network
 Remove-AzureRmVirtualNetwork -Name $VNetName `
     -ResourceGroupName $ResourceGroup
 
-# Create a Public IP Address
-$IpName = 'gw-ip'
 
-$PubliIp = New-AzureRmPublicIpAddress -Name $IpName `
+# ------------------------------------
+# Configure a Point to Site Connection
+# ------------------------------------
+
+# Create a self-signed root certificate
+$FullPath = "C:\Certs\P2SRootCert.cer"
+$CertName = 'P2SRootCert.cer'
+
+$cert = New-SelfSignedCertificate -Type Custom -KeySpec Signature `
+-Subject "CN=P2SRootCert" -KeyExportPolicy Exportable `
+-HashAlgorithm sha256 -KeyLength 2048 `
+-CertStoreLocation "Cert:\CurrentUser\My" -KeyUsageProperty Sign -KeyUsage CertSign
+
+### NOTE: Manually export to C:\Certs\P2SRootCert.cer  ###
+
+$Cert = new-object System.Security.Cryptography.X509Certificates.X509Certificate2($FullPath)
+$CertBase64 = [system.convert]::ToBase64String($Cert.RawData)
+$P2SiteRootCert = New-AzureRmVpnClientRootCertificate -Name $CertName -PublicCertData $CertBase64
+
+
+# Create a Public IP Address
+$GatewayIPName = 'gw-ip'
+$Ip = New-AzureRmPublicIpAddress -Name $GatewayIPName `
     -ResourceGroupName $ResourceGroup `
     -Location $Location `
     -AllocationMethod Dynamic
-
-
-# Create a Virtual Gateway
-$IpConf = New-AzureRmVirtualNetworkGatewayIpConfig -Name $GatewayName `
+$IpConf = New-AzureRmVirtualNetworkGatewayIpConfig -Name 'GatewaySubnet' `
     -Subnet $GatewaySub `
-    -PublicIpAddress $PublicIp
+    -PublicIpAddress $Ip
+
+
+# Create a Virtual Network Gateway
+$VPNClientAddressPool = "172.16.201.0/24"
+New-AzureRmVirtualNetworkGateway -Name $GatewayName `
+    -ResourceGroupName $ResourceGroup `
+    -Location $Location `
+    -IpConfigurations $IpConf `
+    -GatewayType Vpn `
+    -VpnType RouteBased `
+    -EnableBgp $false `
+    -GatewaySku Basic `
+    -VpnClientAddressPool $VPNClientAddressPool `
+    -VpnClientRootCertificates $P2SiteRootCert
 ````
 
 ### Storage Accounts and Containers

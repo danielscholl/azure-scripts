@@ -43,6 +43,118 @@ New-AzureRmResourceGroup -Name $ResourceGroup `
 Find-AzureRmResource -ResourceGroupNameContains $ResourceGroup | Select-Object Name, Kind
 ```
 
+### Virtual Networks
+
+```powershell
+$VNetName  = 'DefaultVNet'
+$VNetPrefix = '10.10.0.0/16'
+$GatewayPrefix = '192.168.200.0/29'
+
+$Subnet1Name = 'Subnet'
+$Subnet1Prefix = '10.10.1.0/24'
+
+# Create Subnets
+$GatewaySub = New-AzureRmVirtualNetworkSubnetConfig -Name 'GatewaySubnet' `
+    -AddressPrefix $GatewayPrefix
+$Subnet = New-AzureRmVirtualNetworkSubnetConfig -Name $Subnet1Name `
+    -AddressPrefix $Subnet1Prefix
+
+
+# Create a Virtual Network
+$VNet = New-AzureRmVirtualNetwork -Name $VNetName `
+    -ResourceGroupName $ResourceGroup `
+    -Location $Location `
+    -AddressPrefix $VNetPrefix,$GatewayPrefix `
+    -Subnet $Subnet,$GatewaySub
+
+
+# Get a Virtual Network and Subnet
+$VNet = Get-AzureRmVirtualNetwork -Name $VNetName `
+    -ResourceGroupName $ResourceGroup
+$GatewaySub = Get-AzureRmVirtualNetworkSubnetConfig -Name 'GatewaySubnet' `
+    -VirtualNetwork $VNet
+
+
+
+
+# ------------------------------------
+# Configure a Point to Site Connection
+# ------------------------------------
+$FullPath = "C:\Certs\CloudCodeIt.cer"
+$CertName = 'CloudCodeIt.cer'
+
+# Create a root certificate
+$CERT = New-SelfSignedCertificate -Type Custom `
+    -Subject "CN=CloudCodeIt" `
+    -HashAlgorithm sha256 `
+    -KeySpec Signature `
+    -KeyLength 2048 `
+    -KeyExportPolicy Exportable `
+    -KeyUsageProperty Sign `
+    -KeyUsage CertSign `
+    -CertStoreLocation "Cert:\CurrentUser\My" 
+
+
+# Get Certificate from thumbprint (Option).
+# NOTE: Manually copy in thumprint
+Get-ChildItem -Path “Cert:\CurrentUser\My”
+$CERT = Get-ChildItem -Path "Cert:\CurrentUser\My\0C8CC3B873D5AE578C3A3748E231FD72189A78F1"
+
+# Create a Client Certificate
+New-SelfSignedCertificate -Type Custom `
+    -Subject "CN=CloudCodeItClient" `
+    -HashAlgorithm sha256 `
+    -KeySpec Signature `
+    -KeyLength 2048 `
+    -KeyExportPolicy Exportable `
+    -Signer $CERT `
+    -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.2") `
+    -CertStoreLocation "Cert:\CurrentUser\My"
+ 
+# Manually export the Certificate to C:\Certs\
+
+
+# Option 2 Using MakeCert
+C:\certs\makecert.exe -n "CN=CloudCodeIt" -pe -sky exchange -a sha1 -r -len 2048 -ss My
+C:\certs\makecert.exe -n "CN=CloudCodeIt" -pe -sky exchange -a sha1 -m 96 -ss My -in "CloudCodeIt" -is my 
+
+
+# Get Certificate for Import
+$Cert = new-object System.Security.Cryptography.X509Certificates.X509Certificate2($FullPath)
+$CertBase64 = [system.convert]::ToBase64String($Cert.RawData)
+$P2SiteRootCert = New-AzureRmVpnClientRootCertificate -Name $CertName -PublicCertData $CertBase64
+
+
+# Create a Public IP Address for the VPN Gateway
+$GatewayIPName = 'gw-ip'
+$Ip = New-AzureRmPublicIpAddress -Name $GatewayIPName `
+    -ResourceGroupName $ResourceGroup `
+    -Location $Location `
+    -AllocationMethod Dynamic
+$IpConf = New-AzureRmVirtualNetworkGatewayIpConfig -Name 'GatewaySubnet' `
+    -Subnet $GatewaySub `
+    -PublicIpAddress $Ip
+
+
+# Create a Virtual Network Gateway
+$VPNClientAddressPool = "172.16.201.0/28"
+New-AzureRmVirtualNetworkGateway -Name $GatewayName `
+    -ResourceGroupName $ResourceGroup `
+    -Location $Location `
+    -IpConfigurations $IpConf `
+    -GatewayType Vpn `
+    -VpnType RouteBased `
+    -EnableBgp $false `
+    -GatewaySku Basic `
+    -VpnClientAddressPool $VPNClientAddressPool `
+    -VpnClientRootCertificates $P2SiteRootCert
+
+
+# Delete a Virtual Network
+Remove-AzureRmVirtualNetwork -Name $VNetName `
+    -ResourceGroupName $ResourceGroup
+````
+
 ### Storage Accounts and Containers
 
 ```powershell

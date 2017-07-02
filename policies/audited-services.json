@@ -1,0 +1,18 @@
+{
+  "$schema": "http://schema.management.azure.com/schemas/2015-10-01-preview/policyDefinition.json",
+  "if": {
+    "anyOf": [
+      {
+        "field": "type",
+        "like": "Microsoft.KeyVault/*"
+      },
+      {
+        "field": "type",
+        "like": "Microsoft.Storage/*"
+      }
+    ]
+  },
+  "then": {
+    "effect": "audit"
+  }
+}

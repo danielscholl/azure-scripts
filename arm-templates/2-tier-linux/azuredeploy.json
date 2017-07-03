@@ -18,12 +18,12 @@
     "vm1Name": {
       "type": "string",
       "minLength": 1,
-      "defaultValue":  "DB1"
+      "defaultValue":  "db1"
     },
     "vm2Name": {
       "type": "string",
       "minLength": 1,
-      "defaultValue":  "DB2"
+      "defaultValue":  "db2"
     },
     "adminUserName": {
       "type": "string",
@@ -65,8 +65,8 @@
 
     "VM1NicName": "[concat(parameters('vm1Name'), '-nic')]",
     "VM2NicName": "[concat(parameters('vm2Name'), '-nic')]",
-    "AvailabilitySetName": "datatier-as",
-    "PublicIpName": "AGW-ip"
+
+    "AvailabilitySetName": "dataTier-as"
   },
   "resources": [
     {
@@ -122,7 +122,6 @@
       },
       "kind": "Storage"
     },
-
     {
       "comments": "## Network Interface ##",
       "name": "[variables('VM1NicName')]",
@@ -175,7 +174,6 @@
         ]
       }
     },
-
     {
       "comments": "## Availability Set ##",
       "name": "dataTier-as",
@@ -191,22 +189,20 @@
         "platformFaultDomainCount": 2
       }
     },
-
     {
       "comments": "## Public IP ##",
-      "name": "[variables('PublicIpName')]",
+      "name": "lb1-ip",
       "type": "Microsoft.Network/publicIPAddresses",
       "location": "[resourceGroup().location]",
       "apiVersion": "2016-03-30",
       "dependsOn": [],
       "tags": {
-        "displayName": "AGW-ip"
+        "displayName": "LB1-ip"
       },
       "properties": {
         "publicIPAllocationMethod": "Dynamic"
       }
     },
-
     {
       "comments": "## Virtual Machine ##",
       "name": "[parameters('vm1Name')]",
@@ -241,9 +237,9 @@
             "version": "latest"
           },
           "osDisk": {
-            "name": "vm1OSDisk",
+            "name": "[concat(parameters('vm1Name'), 'OSDisk')]",
             "vhd": {
-              "uri": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('StorageName')), '2016-01-01').primaryEndpoints.blob, 'vhds/vm1OSDisk.vhd')]"
+              "uri": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('StorageName')), '2016-01-01').primaryEndpoints.blob, 'vhds/', parameters('vm1Name'), 'OSDisk.vhd')]"
             },
             "caching": "ReadWrite",
             "createOption": "FromImage"

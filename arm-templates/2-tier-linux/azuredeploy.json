@@ -50,15 +50,15 @@
     "VNetId": "[resourceId('Microsoft.Network/virtualNetworks', variables('VNetName'))]",
     "VNetPrefix": "10.1.0.0/24",
 
-    "Subnet1Name": "AppTier",
+    "Subnet1Name": "appTier",
     "SubNet1Ref": "[concat(variables('VNetId'), '/subnets/', variables('Subnet1Name'))]",
     "Subnet1Prefix": "10.1.0.0/25",
 
-    "Subnet2Name": "DataTier",
+    "Subnet2Name": "dataTier",
     "SubNet2Ref": "[concat(variables('VNetId'), '/subnets/', variables('Subnet2Name'))]",
     "Subnet2Prefix": "10.1.0.128/26",
 
-    "Subnet3Name": "Dmz",
+    "Subnet3Name": "dmz",
     "SubNet3Ref": "[concat(variables('VNetId'), '/subnets/', variables('Subnet3Name'))]",
     "Subnet3Prefix": "10.1.0.192/27",
 
@@ -66,16 +66,75 @@
     "VM2NicName": "[concat(parameters('vm2Name'), '-nic')]",
 
     "AvailabilitySetName": "dataTier-as",
-    "LoadBalancerName": "lb1"
+    "LoadBalancerName": "lb1",
+    "Nsg1Name": "[concat(variables('Subnet1Name'), '-nsg')]",
+    "Nsg2Name": "[concat(variables('Subnet2Name'), '-nsg')]"
   },
   "resources": [
+    {
+      "apiVersion": "2015-05-01-preview",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "name": "[variables('nsg1Name')]",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "AppTier-nsg"
+      },
+      "properties": {
+        "securityRules": [
+          {
+            "name": "mysql_rule",
+            "properties": {
+              "description": "Allow SQL",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "3306",
+              "sourceAddressPrefix": "Internet",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 120,
+              "direction": "Inbound"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "2015-05-01-preview",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "name": "[variables('nsg2Name')]",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "DataTier-nsg"
+      },
+      "properties": {
+        "securityRules": [
+          {
+            "name": "web_rule",
+            "properties": {
+              "description": "Allow Web",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "80",
+              "sourceAddressPrefix": "Internet",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 110,
+              "direction": "Inbound"
+            }
+          }
+        ]
+      }
+    },
     {
       "comments": "## Virtual Network ##",
       "name": "[variables('VNetName')]",
       "type": "Microsoft.Network/virtualNetworks",
       "location": "[resourceGroup().location]",
       "apiVersion": "2016-03-30",
-      "dependsOn": [],
+      "dependsOn": [
+        "[concat('Microsoft.Network/networkSecurityGroups/', variables('nsg1Name'))]",
+        "[concat('Microsoft.Network/networkSecurityGroups/', variables('nsg2Name'))]"
+      ],
       "tags": {
         "displayName": "VNet"
       },
@@ -89,13 +148,19 @@
           {
             "name": "[variables('Subnet1Name')]",
             "properties": {
-              "addressPrefix": "[variables('Subnet1Prefix')]"
+              "addressPrefix": "[variables('Subnet1Prefix')]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsg1Name'))]"
+              }
             }
           },
           {
             "name": "[variables('Subnet2Name')]",
             "properties": {
-              "addressPrefix": "[variables('Subnet2Prefix')]"
+              "addressPrefix": "[variables('Subnet2Prefix')]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsg2Name'))]"
+              }
             }
           },
           {

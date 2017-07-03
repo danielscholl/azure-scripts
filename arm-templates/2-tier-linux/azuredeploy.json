@@ -45,7 +45,6 @@
   "variables": {
     "RgNameClean": "[toLower(replace(resourceGroup().name,'-', ''))]",
     "StorageName": "[concat(variables('RgNameClean'), uniqueString(resourceGroup().id))]",
-    "StorageAccountContainerName": "vhds",
 
     "VNetName": "[concat(variables('RgNameClean'), 'VNet')]",
     "VNetId": "[resourceId('Microsoft.Network/virtualNetworks', variables('VNetName'))]",

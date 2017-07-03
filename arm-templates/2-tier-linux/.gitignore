@@ -50,6 +50,8 @@ SourceArt/**/*.tga
 
 # Binary Files
 Binaries/*
+bin/*
+obj/*
 
 # Builds
 Build/*

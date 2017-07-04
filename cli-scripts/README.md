@@ -186,5 +186,22 @@ az webapp config appsettings set -n ${WEBSITE} --settings \
   database=${NODEBB_DBTYPE} \
   mongo__database=${CONNECTION}
 
+```
+
+### Deploy an ARM Template
+
+```bash
+
+ResourceGroup="533"
+Location="southcentralus"
+URL="https://raw.githubusercontent.com/danielscholl/azure-scripts/master/arm-templates/2-tier-linux/azuredeploy.json"
+
+az group create --name ${ResourceGroup} \
+  --location ${Location}
+
+az group deployment create -g ${ResourceGroup} \
+  --template-uri ${URL} \
+  --parameters MyValue=This MyArray=@array.json \
+  --parameters-file templates/params.json
 
 ```

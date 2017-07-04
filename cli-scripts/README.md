@@ -201,7 +201,11 @@ az group create --name ${ResourceGroup} \
 
 az group deployment create -g ${ResourceGroup} \
   --template-uri ${URL} \
-  --parameters MyValue=This MyArray=@array.json \
-  --parameters-file templates/params.json
+  --parameters MyValue=This MyArray=@array.json
+
+az group deployment create -g ${ResourceGroup} \
+  --template-file  azuredeploy2.json \
+  --parameters @params.json
+
 
 ```

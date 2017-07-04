@@ -1,443 +1,80 @@
-﻿{
+{
   "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    "storageType": {
+    "vnetName": {
       "type": "string",
-      "defaultValue": "Standard_LRS",
-      "allowedValues": [
-        "Standard_LRS",
-        "Standard_GRS",
-        "Premium_LRS"
-      ]
+      "defaultValue": "VNet1",
+      "metadata": {
+        "description": "VNet name"
+      }
     },
-    "vmSize": {
+    "vnetAddressPrefix": {
       "type": "string",
-      "defaultValue": "Standard_D2_v2"
+      "defaultValue": "10.0.0.0/16",
+      "metadata": {
+        "description": "Address prefix"
+      }
     },
-    "vm1Name": {
+    "subnet1Prefix": {
       "type": "string",
-      "minLength": 1,
-      "defaultValue": "db1"
+      "defaultValue": "10.0.0.0/24",
+      "metadata": {
+        "description": "Subnet 1 Prefix"
+      }
     },
-    "vm2Name": {
+    "subnet1Name": {
       "type": "string",
-      "minLength": 1,
-      "defaultValue": "db2"
+      "defaultValue": "Subnet1",
+      "metadata": {
+        "description": "Subnet 1 Name"
+      }
     },
-    "adminUserName": {
+    "subnet2Prefix": {
       "type": "string",
-      "minLength": 1,
-      "defaultValue": "azureuser"
+      "defaultValue": "10.0.1.0/24",
+      "metadata": {
+        "description": "Subnet 2 Prefix"
+      }
     },
-    "adminPassword": {
-      "type": "securestring"
-    },
-    "ubuntuVersion": {
+    "subnet2Name": {
       "type": "string",
-      "defaultValue": "14.04.2-LTS",
-      "allowedValues": [
-        "12.04.5-LTS",
-        "14.04.2-LTS"
-      ]
+      "defaultValue": "Subnet2",
+      "metadata": {
+        "description": "Subnet 2 Name"
+      }
     }
   },
   "variables": {
-    "RgNameClean": "[toLower(replace(resourceGroup().name,'-', ''))]",
-    "StorageName": "[concat(variables('RgNameClean'), uniqueString(resourceGroup().id))]",
-    "VNetName": "[concat(variables('RgNameClean'), 'VNet')]",
-    "VNetId": "[resourceId('Microsoft.Network/virtualNetworks', variables('VNetName'))]",
-    "VNetPrefix": "10.1.0.0/24",
-    "Subnet1Name": "appTier",
-    "SubNet1Ref": "[concat(variables('VNetId'), '/subnets/', variables('Subnet1Name'))]",
-    "Subnet1Prefix": "10.1.0.0/25",
-    "Subnet2Name": "dataTier",
-    "SubNet2Ref": "[concat(variables('VNetId'), '/subnets/', variables('Subnet2Name'))]",
-    "Subnet2Prefix": "10.1.0.128/26",
-    "Subnet3Name": "dmz",
-    "SubNet3Ref": "[concat(variables('VNetId'), '/subnets/', variables('Subnet3Name'))]",
-    "Subnet3Prefix": "10.1.0.192/27",
-    "VM1NicName": "[concat(parameters('vm1Name'), '-nic')]",
-    "VM2NicName": "[concat(parameters('vm2Name'), '-nic')]",
-    "AvailabilitySetName": "dataTier-as",
-    "LoadBalancerName": "lb1",
-    "Nsg1Name": "[concat(variables('Subnet1Name'), '-nsg')]",
-    "Nsg2Name": "[concat(variables('Subnet2Name'), '-nsg')]"
+    "apiVersion": "2015-06-15"
   },
   "resources": [
     {
-      "apiVersion": "2015-05-01-preview",
-      "type": "Microsoft.Network/networkSecurityGroups",
-      "name": "[variables('nsg1Name')]",
-      "location": "[resourceGroup().location]",
-      "tags": {
-        "displayName": "AppTier-nsg"
-      },
-      "properties": {
-        "securityRules": [
-          {
-            "name": "mysql_rule",
-            "properties": {
-              "description": "Allow SQL",
-              "protocol": "Tcp",
-              "sourcePortRange": "*",
-              "destinationPortRange": "3306",
-              "sourceAddressPrefix": "Internet",
-              "destinationAddressPrefix": "*",
-              "access": "Allow",
-              "priority": 120,
-              "direction": "Inbound"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "apiVersion": "2015-05-01-preview",
-      "type": "Microsoft.Network/networkSecurityGroups",
-      "name": "[variables('nsg2Name')]",
-      "location": "[resourceGroup().location]",
-      "tags": {
-        "displayName": "DataTier-nsg"
-      },
-      "properties": {
-        "securityRules": [
-          {
-            "name": "web_rule",
-            "properties": {
-              "description": "Allow Web",
-              "protocol": "Tcp",
-              "sourcePortRange": "*",
-              "destinationPortRange": "80",
-              "sourceAddressPrefix": "Internet",
-              "destinationAddressPrefix": "*",
-              "access": "Allow",
-              "priority": 110,
-              "direction": "Inbound"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "comments": "## Virtual Network ##",
-      "name": "[variables('VNetName')]",
+      "apiVersion": "[variables('apiVersion')]",
       "type": "Microsoft.Network/virtualNetworks",
+      "name": "[parameters('vnetName')]",
       "location": "[resourceGroup().location]",
-      "apiVersion": "2016-03-30",
-      "dependsOn": [
-        "[concat('Microsoft.Network/networkSecurityGroups/', variables('nsg1Name'))]",
-        "[concat('Microsoft.Network/networkSecurityGroups/', variables('nsg2Name'))]"
-      ],
-      "tags": {
-        "displayName": "VNet"
-      },
       "properties": {
         "addressSpace": {
           "addressPrefixes": [
-            "[variables('VNetPrefix')]"
+            "[parameters('vnetAddressPrefix')]"
           ]
         },
         "subnets": [
           {
-            "name": "[variables('Subnet1Name')]",
+            "name": "[parameters('subnet1Name')]",
             "properties": {
-              "addressPrefix": "[variables('Subnet1Prefix')]",
-              "networkSecurityGroup": {
-                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsg1Name'))]"
-              }
+              "addressPrefix": "[parameters('subnet1Prefix')]"
             }
           },
           {
-            "name": "[variables('Subnet2Name')]",
+            "name": "[parameters('subnet2Name')]",
             "properties": {
-              "addressPrefix": "[variables('Subnet2Prefix')]",
-              "networkSecurityGroup": {
-                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsg2Name'))]"
-              }
+              "addressPrefix": "[parameters('subnet2Prefix')]"
             }
-          },
-          {
-            "name": "[variables('Subnet3Name')]",
-            "properties": {
-              "addressPrefix": "[variables('Subnet3Prefix')]"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "comments": "## Storage Account ##",
-      "name": "[variables('storageName')]",
-      "type": "Microsoft.Storage/storageAccounts",
-      "location": "[resourceGroup().location]",
-      "apiVersion": "2016-01-01",
-      "sku": {
-        "name": "[parameters('storageType')]"
-      },
-      "dependsOn": [],
-      "tags": {
-        "displayName": "Storage"
-      },
-      "kind": "Storage"
-    },
-    {
-      "comments": "## Network Interface ##",
-      "name": "[variables('VM1NicName')]",
-      "type": "Microsoft.Network/networkInterfaces",
-      "location": "[resourceGroup().location]",
-      "apiVersion": "2016-03-30",
-      "dependsOn": [
-        "[resourceId('Microsoft.Network/virtualNetworks', variables('VNetName'))]",
-        "[resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName'))]"
-      ],
-      "tags": {
-        "displayName": "VM1-nic"
-      },
-      "properties": {
-        "ipConfigurations": [
-          {
-            "name": "ipconfig1",
-            "properties": {
-              "privateIPAllocationMethod": "Dynamic",
-              "subnet": {
-                "id": "[variables('SubNet2Ref')]"
-              },
-              "loadBalancerBackendAddressPools": [
-                {
-                  "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName')),'/backendAddressPools/lbBackEnd')]"
-                }
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "comments": "## Network Interface ##",
-      "name": "[variables('vm2NicName')]",
-      "type": "Microsoft.Network/networkInterfaces",
-      "location": "[resourceGroup().location]",
-      "apiVersion": "2016-03-30",
-      "dependsOn": [
-        "[resourceId('Microsoft.Network/virtualNetworks', variables('VNetName'))]",
-        "[resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName'))]"
-      ],
-      "tags": {
-        "displayName": "VM2-nic"
-      },
-      "properties": {
-        "ipConfigurations": [
-          {
-            "name": "ipconfig1",
-            "properties": {
-              "privateIPAllocationMethod": "Dynamic",
-              "subnet": {
-                "id": "[variables('SubNet2Ref')]"
-              },
-              "loadBalancerBackendAddressPools": [
-                {
-                  "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName')),'/backendAddressPools/lbBackEnd')]"
-                }
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "comments": "## Availability Set ##",
-      "name": "dataTier-as",
-      "type": "Microsoft.Compute/availabilitySets",
-      "location": "[resourceGroup().location]",
-      "apiVersion": "2015-06-15",
-      "dependsOn": [],
-      "tags": {
-        "displayName": "DataTier-as"
-      },
-      "properties": {
-        "platformUpdateDomainCount": 5,
-        "platformFaultDomainCount": 2
-      }
-    },
-    {
-      "comments": "## Public IP ##",
-      "name": "lb1-ip",
-      "type": "Microsoft.Network/publicIPAddresses",
-      "location": "[resourceGroup().location]",
-      "apiVersion": "2016-03-30",
-      "dependsOn": [],
-      "tags": {
-        "displayName": "LB1-ip"
-      },
-      "properties": {
-        "publicIPAllocationMethod": "Dynamic"
-      }
-    },
-    {
-      "comments": "## Virtual Machine ##",
-      "name": "[parameters('vm1Name')]",
-      "type": "Microsoft.Compute/virtualMachines",
-      "location": "[resourceGroup().location]",
-      "apiVersion": "2015-06-15",
-      "dependsOn": [
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('StorageName'))]",
-        "[resourceId('Microsoft.Network/networkInterfaces', variables('Vm1NicName'))]",
-        "[resourceId('Microsoft.Compute/availabilitySets', variables('AvailabilitySetName'))]"
-      ],
-      "tags": {
-        "displayName": "VM1"
-      },
-      "properties": {
-        "availabilitySet": {
-          "id": "[resourceId('Microsoft.Compute/availabilitySets', variables('AvailabilitySetName'))]"
-        },
-        "hardwareProfile": {
-          "vmSize": "[parameters('vmSize')]"
-        },
-        "osProfile": {
-          "computerName": "[parameters('vm1Name')]",
-          "adminUsername": "[parameters('adminUserName')]",
-          "adminPassword": "[parameters('adminPassword')]"
-        },
-        "storageProfile": {
-          "imageReference": {
-            "publisher": "Canonical",
-            "offer": "UbuntuServer",
-            "sku": "[parameters('ubuntuVersion')]",
-            "version": "latest"
-          },
-          "osDisk": {
-            "name": "[concat(parameters('vm1Name'), 'OSDisk')]",
-            "vhd": {
-              "uri": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('StorageName')), '2016-01-01').primaryEndpoints.blob, 'vhds/', parameters('vm1Name'), 'OSDisk.vhd')]"
-            },
-            "caching": "ReadWrite",
-            "createOption": "FromImage"
-          }
-        },
-        "networkProfile": {
-          "networkInterfaces": [
-            {
-              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('VM1NicName'))]"
-            }
-          ]
-        }
-      }
-    },
-    {
-      "comments": "## Virtual Machine ##",
-      "name": "[parameters('vm2Name')]",
-      "type": "Microsoft.Compute/virtualMachines",
-      "location": "[resourceGroup().location]",
-      "apiVersion": "2015-06-15",
-      "dependsOn": [
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('StorageName'))]",
-        "[resourceId('Microsoft.Network/networkInterfaces', variables('Vm2NicName'))]",
-        "[resourceId('Microsoft.Compute/availabilitySets', variables('AvailabilitySetName'))]"
-      ],
-      "tags": {
-        "displayName": "VM2"
-      },
-      "properties": {
-        "availabilitySet": {
-          "id": "[resourceId('Microsoft.Compute/availabilitySets', variables('AvailabilitySetName'))]"
-        },
-        "hardwareProfile": {
-          "vmSize": "[parameters('vmSize')]"
-        },
-        "osProfile": {
-          "computerName": "[parameters('vm2Name')]",
-          "adminUsername": "[parameters('adminUserName')]",
-          "adminPassword": "[parameters('adminPassword')]"
-        },
-        "storageProfile": {
-          "imageReference": {
-            "publisher": "Canonical",
-            "offer": "UbuntuServer",
-            "sku": "[parameters('ubuntuVersion')]",
-            "version": "latest"
-          },
-          "osDisk": {
-            "name": "[concat(parameters('vm2Name'), 'OSDisk')]",
-            "vhd": {
-              "uri": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('StorageName')), '2016-01-01').primaryEndpoints.blob, 'vhds/', parameters('vm2Name'), 'OSDisk.vhd')]"
-            },
-            "caching": "ReadWrite",
-            "createOption": "FromImage"
-          }
-        },
-        "networkProfile": {
-          "networkInterfaces": [
-            {
-              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('VM2NicName'))]"
-            }
-          ]
-        }
-      }
-    },
-    {
-      "apiVersion": "2015-05-01-preview",
-      "name": "[variables('LoadBalancerName')]",
-      "type": "Microsoft.Network/loadBalancers",
-      "location": "[resourceGroup().location]",
-      "dependsOn": [
-        "[concat('Microsoft.Network/virtualNetworks/', variables('VNetName'))]"
-      ],
-      "tags": {
-        "displayName": "LB1"
-      },
-      "properties": {
-        "frontendIPConfigurations": [
-          {
-            "name": "lbFrontEnd",
-            "properties": {
-              "privateIPAddress": "10.1.0.132",
-              "privateIPAllocationMethod": "Static",
-              "subnet": {
-                "id": "[variables('SubNet2Ref')]"
-              }
-            }
-          }
-        ],
-        "backendAddressPools": [
-          {
-            "name": "lbBackEnd"
-          }
-        ],
-        "loadBalancingRules": [
-          {
-            "properties": {
-              "frontendIPConfiguration": {
-                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('LoadBalancerName')), '/frontendIpConfigurations/lbFrontEnd')]"
-              },
-              "backendAddressPool": {
-                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('LoadBalancerName')), '/backendAddressPools/lbBackEnd')]"
-              },
-              "probe": {
-                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('LoadBalancerName')), '/probes/lbProbe')]"
-              },
-              "protocol": "Tcp",
-              "frontendPort": 3306,
-              "backendPort": 3306,
-              "idleTimeoutInMinutes": 15
-            },
-            "name": "lbrule"
-          }
-        ],
-        "probes": [
-          {
-            "properties": {
-              "protocol": "Tcp",
-              "port": 3306,
-              "intervalInSeconds": 15,
-              "numberOfProbes": 2
-            },
-            "name": "lbProbe"
           }
         ]
       }
     }
-  ],
-  "outputs": {}
+  ]
 }

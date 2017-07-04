@@ -13,7 +13,7 @@
     },
     "vmSize": {
       "type": "string",
-      "defaultValue": "Standard_D2_v2"
+      "defaultValue": "Standard_DS1_v2"
     },
     "vm1Name": {
       "type": "string",
@@ -33,13 +33,18 @@
     "adminPassword": {
       "type": "securestring"
     },
-    "ubuntuVersion": {
+    "ubuntuOSVersion": {
       "type": "string",
-      "defaultValue": "14.04.2-LTS",
+      "defaultValue": "16.04.0-LTS",
       "allowedValues": [
         "12.04.5-LTS",
-        "14.04.2-LTS"
-      ]
+        "14.04.5-LTS",
+        "15.10",
+        "16.04.0-LTS"
+      ],
+      "metadata": {
+        "description": "The Ubuntu version for the VM. This will pick a fully patched image of this given Ubuntu version."
+      }
     }
   },
   "variables": {
@@ -179,7 +184,79 @@
       "tags": {
         "displayName": "Storage"
       },
+      "properties": {
+        "encryption": {
+          "keySource": "Microsoft.Storage",
+          "services": {
+            "blob": {
+              "enabled": true
+            }
+          }
+        }
+      },
       "kind": "Storage"
+    },
+    {
+      "apiVersion": "2015-05-01-preview",
+      "name": "[variables('LoadBalancerName')]",
+      "type": "Microsoft.Network/loadBalancers",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[concat('Microsoft.Network/virtualNetworks/', variables('VNetName'))]"
+      ],
+      "tags": {
+        "displayName": "LB1"
+      },
+      "properties": {
+        "frontendIPConfigurations": [
+          {
+            "name": "lbFrontEnd",
+            "properties": {
+              "privateIPAddress": "10.1.0.132",
+              "privateIPAllocationMethod": "Static",
+              "subnet": {
+                "id": "[variables('SubNet2Ref')]"
+              }
+            }
+          }
+        ],
+        "backendAddressPools": [
+          {
+            "name": "lbBackEnd"
+          }
+        ],
+        "loadBalancingRules": [
+          {
+            "properties": {
+              "frontendIPConfiguration": {
+                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('LoadBalancerName')), '/frontendIpConfigurations/lbFrontEnd')]"
+              },
+              "backendAddressPool": {
+                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('LoadBalancerName')), '/backendAddressPools/lbBackEnd')]"
+              },
+              "probe": {
+                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('LoadBalancerName')), '/probes/lbProbe')]"
+              },
+              "protocol": "Tcp",
+              "frontendPort": 3306,
+              "backendPort": 3306,
+              "idleTimeoutInMinutes": 15
+            },
+            "name": "lbrule"
+          }
+        ],
+        "probes": [
+          {
+            "properties": {
+              "protocol": "Tcp",
+              "port": 3306,
+              "intervalInSeconds": 15,
+              "numberOfProbes": 2
+            },
+            "name": "lbProbe"
+          }
+        ]
+      }
     },
     {
       "comments": "## Network Interface ##",
@@ -261,20 +338,6 @@
       }
     },
     {
-      "comments": "## Public IP ##",
-      "name": "lb1-ip",
-      "type": "Microsoft.Network/publicIPAddresses",
-      "location": "[resourceGroup().location]",
-      "apiVersion": "2016-03-30",
-      "dependsOn": [],
-      "tags": {
-        "displayName": "LB1-ip"
-      },
-      "properties": {
-        "publicIPAllocationMethod": "Dynamic"
-      }
-    },
-    {
       "comments": "## Virtual Machine ##",
       "name": "[parameters('vm1Name')]",
       "type": "Microsoft.Compute/virtualMachines",
@@ -304,7 +367,7 @@
           "imageReference": {
             "publisher": "Canonical",
             "offer": "UbuntuServer",
-            "sku": "[parameters('ubuntuVersion')]",
+            "sku": "[parameters('ubuntuOSVersion')]",
             "version": "latest"
           },
           "osDisk": {
@@ -355,7 +418,7 @@
           "imageReference": {
             "publisher": "Canonical",
             "offer": "UbuntuServer",
-            "sku": "[parameters('ubuntuVersion')]",
+            "sku": "[parameters('ubuntuOSVersion')]",
             "version": "latest"
           },
           "osDisk": {
@@ -377,65 +440,17 @@
       }
     },
     {
-      "apiVersion": "2015-05-01-preview",
-      "name": "[variables('LoadBalancerName')]",
-      "type": "Microsoft.Network/loadBalancers",
+      "comments": "## Public IP ##",
+      "name": "appgw-ip",
+      "type": "Microsoft.Network/publicIPAddresses",
       "location": "[resourceGroup().location]",
-      "dependsOn": [
-        "[concat('Microsoft.Network/virtualNetworks/', variables('VNetName'))]"
-      ],
+      "apiVersion": "2016-03-30",
+      "dependsOn": [],
       "tags": {
-        "displayName": "LB1"
+        "displayName": "APPGW-ip"
       },
       "properties": {
-        "frontendIPConfigurations": [
-          {
-            "name": "lbFrontEnd",
-            "properties": {
-              "privateIPAddress": "10.1.0.132",
-              "privateIPAllocationMethod": "Static",
-              "subnet": {
-                "id": "[variables('SubNet2Ref')]"
-              }
-            }
-          }
-        ],
-        "backendAddressPools": [
-          {
-            "name": "lbBackEnd"
-          }
-        ],
-        "loadBalancingRules": [
-          {
-            "properties": {
-              "frontendIPConfiguration": {
-                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('LoadBalancerName')), '/frontendIpConfigurations/lbFrontEnd')]"
-              },
-              "backendAddressPool": {
-                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('LoadBalancerName')), '/backendAddressPools/lbBackEnd')]"
-              },
-              "probe": {
-                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('LoadBalancerName')), '/probes/lbProbe')]"
-              },
-              "protocol": "Tcp",
-              "frontendPort": 3306,
-              "backendPort": 3306,
-              "idleTimeoutInMinutes": 15
-            },
-            "name": "lbrule"
-          }
-        ],
-        "probes": [
-          {
-            "properties": {
-              "protocol": "Tcp",
-              "port": 3306,
-              "intervalInSeconds": 15,
-              "numberOfProbes": 2
-            },
-            "name": "lbProbe"
-          }
-        ]
+        "publicIPAllocationMethod": "Dynamic"
       }
     }
   ],

@@ -75,7 +75,7 @@
     "VM2NicName": "[concat(parameters('vm2Name'), '-nic')]",
     "AvailabilitySetName": "dataTier-as",
     "LBName": "[concat(variables('RgNameClean'), '-LB')]",
-    "LBId": "resourceId('Microsoft.Network/loadBalancers', variables('LBName'))",
+    "LBId": "[resourceId('Microsoft.Network/loadBalancers', variables('LBName'))]",
     "Nsg1Name": "[concat(variables('Subnet1Name'), '-nsg')]",
     "Nsg2Name": "[concat(variables('Subnet2Name'), '-nsg')]",
     "AppGwIpName": "appgw-ip",

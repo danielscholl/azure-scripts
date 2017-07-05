@@ -15,6 +15,14 @@
       "type": "string",
       "defaultValue": "Standard_DS1_v2"
     },
+    "instanceCount": {
+      "type": "int",
+      "defaultValue": 3,
+      "metadata": {
+        "description": "Number of VM instances (1000 or less)."
+      },
+      "maxValue": 1000
+    },
     "vm1Name": {
       "type": "string",
       "minLength": 1,
@@ -50,24 +58,32 @@
   "variables": {
     "RgNameClean": "[toLower(replace(resourceGroup().name,'-', ''))]",
     "StorageName": "[concat(variables('RgNameClean'), uniqueString(resourceGroup().id))]",
-    "VNetName": "[concat(variables('RgNameClean'), 'VNet')]",
+    "StorageId": "[resourceId('Microsoft.Storage/storageAccounts', variables('StorageName'))]",
+    "VNetName": "[concat(variables('RgNameClean'), '-VNet')]",
     "VNetId": "[resourceId('Microsoft.Network/virtualNetworks', variables('VNetName'))]",
     "VNetPrefix": "10.1.0.0/24",
     "Subnet1Name": "appTier",
-    "SubNet1Ref": "[concat(variables('VNetId'), '/subnets/', variables('Subnet1Name'))]",
+    "SubNet1Id": "[concat(variables('VNetId'), '/subnets/', variables('Subnet1Name'))]",
     "Subnet1Prefix": "10.1.0.0/25",
     "Subnet2Name": "dataTier",
-    "SubNet2Ref": "[concat(variables('VNetId'), '/subnets/', variables('Subnet2Name'))]",
+    "SubNet2Id": "[concat(variables('VNetId'), '/subnets/', variables('Subnet2Name'))]",
     "Subnet2Prefix": "10.1.0.128/26",
     "Subnet3Name": "dmz",
-    "SubNet3Ref": "[concat(variables('VNetId'), '/subnets/', variables('Subnet3Name'))]",
+    "SubNet3Id": "[concat(variables('VNetId'), '/subnets/', variables('Subnet3Name'))]",
     "Subnet3Prefix": "10.1.0.192/27",
     "VM1NicName": "[concat(parameters('vm1Name'), '-nic')]",
     "VM2NicName": "[concat(parameters('vm2Name'), '-nic')]",
     "AvailabilitySetName": "dataTier-as",
-    "LoadBalancerName": "lb1",
+    "LBName": "[concat(variables('RgNameClean'), '-LB')]",
+    "LBId": "resourceId('Microsoft.Network/loadBalancers', variables('LBName'))",
     "Nsg1Name": "[concat(variables('Subnet1Name'), '-nsg')]",
-    "Nsg2Name": "[concat(variables('Subnet2Name'), '-nsg')]"
+    "Nsg2Name": "[concat(variables('Subnet2Name'), '-nsg')]",
+    "AppGwIpName": "appgw-ip",
+    "AppGwIpId": "[resourceId('Microsoft.Network/publicIPAddresses',variables('AppGwIpName'))]",
+    "AppGwName": "[concat(variables('RgNameClean'), '-AppGw')]",
+    "AppGwId": "[resourceId('Microsoft.Network/applicationGateways',variables('AppGwName'))]",
+    "AppGwBEPoolName": "BePool",
+    "VMSSName": "[concat(variables('RgNameClean'), '-AppVmss')]"
   },
   "resources": [
     {
@@ -131,8 +147,8 @@
       "location": "[resourceGroup().location]",
       "apiVersion": "2016-03-30",
       "dependsOn": [
-        "[concat('Microsoft.Network/networkSecurityGroups/', variables('nsg1Name'))]",
-        "[concat('Microsoft.Network/networkSecurityGroups/', variables('nsg2Name'))]"
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsg1Name'))]",
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsg2Name'))]"
       ],
       "tags": {
         "displayName": "VNet"
@@ -197,12 +213,13 @@
       "kind": "Storage"
     },
     {
-      "apiVersion": "2015-05-01-preview",
-      "name": "[variables('LoadBalancerName')]",
+      "comments": "## Load Balancer ##",
+      "name": "[variables('LBName')]",
       "type": "Microsoft.Network/loadBalancers",
       "location": "[resourceGroup().location]",
+      "apiVersion": "2015-05-01-preview",
       "dependsOn": [
-        "[concat('Microsoft.Network/virtualNetworks/', variables('VNetName'))]"
+        "[variables('VNetId')]"
       ],
       "tags": {
         "displayName": "LB1"
@@ -215,7 +232,7 @@
               "privateIPAddress": "10.1.0.132",
               "privateIPAllocationMethod": "Static",
               "subnet": {
-                "id": "[variables('SubNet2Ref')]"
+                "id": "[variables('SubNet2Id')]"
               }
             }
           }
@@ -229,13 +246,13 @@
           {
             "properties": {
               "frontendIPConfiguration": {
-                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('LoadBalancerName')), '/frontendIpConfigurations/lbFrontEnd')]"
+                "id": "[concat(variables('LBId'), '/frontendIpConfigurations/lbFrontEnd')]"
               },
               "backendAddressPool": {
-                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('LoadBalancerName')), '/backendAddressPools/lbBackEnd')]"
+                "id": "[concat(variables('LBId'), '/backendAddressPools/lbBackEnd')]"
               },
               "probe": {
-                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('LoadBalancerName')), '/probes/lbProbe')]"
+                "id": "[concat(variables('LBId'), '/probes/lbProbe')]"
               },
               "protocol": "Tcp",
               "frontendPort": 3306,
@@ -265,8 +282,8 @@
       "location": "[resourceGroup().location]",
       "apiVersion": "2016-03-30",
       "dependsOn": [
-        "[resourceId('Microsoft.Network/virtualNetworks', variables('VNetName'))]",
-        "[resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName'))]"
+        "[variables('VNetId')]",
+        "[variables('LBId')]"
       ],
       "tags": {
         "displayName": "VM1-nic"
@@ -278,11 +295,11 @@
             "properties": {
               "privateIPAllocationMethod": "Dynamic",
               "subnet": {
-                "id": "[variables('SubNet2Ref')]"
+                "id": "[variables('SubNet2Id')]"
               },
               "loadBalancerBackendAddressPools": [
                 {
-                  "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName')),'/backendAddressPools/lbBackEnd')]"
+                  "id": "[concat(variables('LBId'), '/backendAddressPools/lbBackEnd')]"
                 }
               ]
             }
@@ -297,8 +314,8 @@
       "location": "[resourceGroup().location]",
       "apiVersion": "2016-03-30",
       "dependsOn": [
-        "[resourceId('Microsoft.Network/virtualNetworks', variables('VNetName'))]",
-        "[resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName'))]"
+        "[variables('VNetId')]",
+        "[variables('LBId')]"
       ],
       "tags": {
         "displayName": "VM2-nic"
@@ -310,11 +327,11 @@
             "properties": {
               "privateIPAllocationMethod": "Dynamic",
               "subnet": {
-                "id": "[variables('SubNet2Ref')]"
+                "id": "[variables('SubNet2Id')]"
               },
               "loadBalancerBackendAddressPools": [
                 {
-                  "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName')),'/backendAddressPools/lbBackEnd')]"
+                  "id": "[concat(variables('LBId'), '/backendAddressPools/lbBackEnd')]"
                 }
               ]
             }
@@ -344,9 +361,9 @@
       "location": "[resourceGroup().location]",
       "apiVersion": "2015-06-15",
       "dependsOn": [
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('StorageName'))]",
-        "[resourceId('Microsoft.Network/networkInterfaces', variables('Vm1NicName'))]",
-        "[resourceId('Microsoft.Compute/availabilitySets', variables('AvailabilitySetName'))]"
+        "[variables('StorageId')]",
+        "[resourceId('Microsoft.Compute/availabilitySets', variables('AvailabilitySetName'))]",
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('Vm1NicName'))]"
       ],
       "tags": {
         "displayName": "VM1"
@@ -373,7 +390,7 @@
           "osDisk": {
             "name": "[concat(parameters('vm1Name'), 'OSDisk')]",
             "vhd": {
-              "uri": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('StorageName')), '2016-01-01').primaryEndpoints.blob, 'vhds/', parameters('vm1Name'), 'OSDisk.vhd')]"
+              "uri": "[concat(reference(variables('StorageId'), '2016-01-01').primaryEndpoints.blob, 'vhds/', parameters('vm1Name'), 'OSDisk.vhd')]"
             },
             "caching": "ReadWrite",
             "createOption": "FromImage"
@@ -395,9 +412,9 @@
       "location": "[resourceGroup().location]",
       "apiVersion": "2015-06-15",
       "dependsOn": [
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('StorageName'))]",
-        "[resourceId('Microsoft.Network/networkInterfaces', variables('Vm2NicName'))]",
-        "[resourceId('Microsoft.Compute/availabilitySets', variables('AvailabilitySetName'))]"
+        "[variables('StorageId')]",
+        "[resourceId('Microsoft.Compute/availabilitySets', variables('AvailabilitySetName'))]",
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('Vm2NicName'))]"
       ],
       "tags": {
         "displayName": "VM2"
@@ -424,7 +441,7 @@
           "osDisk": {
             "name": "[concat(parameters('vm2Name'), 'OSDisk')]",
             "vhd": {
-              "uri": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('StorageName')), '2016-01-01').primaryEndpoints.blob, 'vhds/', parameters('vm2Name'), 'OSDisk.vhd')]"
+              "uri": "[concat(reference(variables('storageId'), '2016-01-01').primaryEndpoints.blob, 'vhds/', parameters('vm2Name'), 'OSDisk.vhd')]"
             },
             "caching": "ReadWrite",
             "createOption": "FromImage"
@@ -441,7 +458,7 @@
     },
     {
       "comments": "## Public IP ##",
-      "name": "appgw-ip",
+      "name": "[variables('AppGwIpName')]",
       "type": "Microsoft.Network/publicIPAddresses",
       "location": "[resourceGroup().location]",
       "apiVersion": "2016-03-30",
@@ -451,6 +468,167 @@
       },
       "properties": {
         "publicIPAllocationMethod": "Dynamic"
+      }
+    },
+    {
+      "comments": "## Application Gateway ##",
+      "name": "[variables('AppGwName')]",
+      "type": "Microsoft.Network/applicationGateways",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2017-03-01",
+      "dependsOn": [
+        "[variables('VNetId')]",
+        "[variables('AppGwIpId')]"
+      ],
+      "properties": {
+        "sku": {
+          "name": "Standard_Small",
+          "tier": "Standard",
+          "capacity": "2"
+        },
+        "gatewayIPConfigurations": [
+          {
+            "name": "appGwIpConfig",
+            "properties": {
+              "subnet": {
+                "id": "[variables('SubNet3Id')]"
+              }
+            }
+          }
+        ],
+        "frontendIPConfigurations": [
+          {
+            "name": "appGwFrontendIP",
+            "properties": {
+              "PublicIPAddress": {
+                "id": "[variables('AppGwIpId')]"
+              }
+            }
+          }
+        ],
+        "frontendPorts": [
+          {
+            "name": "AppGwFEPort",
+            "properties": {
+              "Port": "80"
+            }
+          }
+        ],
+        "backendAddressPools": [
+          {
+            "name": "[variables('AppGwBEPoolName')]"
+          }
+        ],
+        "backendHttpSettingsCollection": [
+          {
+            "name": "appGwBackendHttpSettings",
+            "properties": {
+              "Port": "80",
+              "Protocol": "Http",
+              "CookieBasedAffinity": "Disabled"
+            }
+          }
+        ],
+        "httpListeners": [
+          {
+            "name": "appGwHttpListener",
+            "properties": {
+              "FrontendIPConfiguration": {
+                "Id": "[concat(variables('AppGwId'), '/frontendIPConfigurations/appGwFrontendIP')]"
+              },
+              "FrontendPort": {
+                "Id": "[concat(variables('AppGwId'), '/frontendPorts/AppGwFEPort')]"
+              },
+              "Protocol": "Http",
+              "SslCertificate": null
+            }
+          }
+        ],
+        "requestRoutingRules": [
+          {
+            "Name": "rule1",
+            "properties": {
+              "RuleType": "Basic",
+              "httpListener": {
+                "id": "[concat(variables('AppGwId'), '/httpListeners/appGwHttpListener')]"
+              },
+              "backendAddressPool": {
+                "id": "[concat(variables('AppGwId'), '/backendAddressPools/', variables('AppGwBEPoolName'))]"
+              },
+              "backendHttpSettings": {
+                "id": "[concat(variables('AppGwId'), '/backendHttpSettingsCollection/appGwBackendHttpSettings')]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "comments": "## VM Scale Set ##",
+      "type": "Microsoft.Compute/virtualMachineScaleSets",
+      "name": "[variables('VMSSName')]",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-04-30-preview",
+      "dependsOn": [
+        "[variables('VNetId')]",
+        "[variables('AppGwId')]"
+      ],
+      "sku": {
+        "name": "[parameters('vmSize')]",
+        "tier": "Standard",
+        "capacity": "[parameters('instanceCount')]"
+      },
+      "properties": {
+        "overprovision": true,
+        "singlePlacementGroup": true,
+        "upgradePolicy": {
+          "mode": "Manual"
+        },
+        "virtualMachineProfile": {
+          "storageProfile": {
+            "osDisk": {
+              "createOption": "FromImage",
+              "caching": "ReadOnly"
+            },
+            "dataDisks": [],
+            "imageReference": {
+              "publisher": "Canonical",
+              "offer": "UbuntuServer",
+              "sku": "[parameters('ubuntuOSVersion')]",
+              "version": "latest"
+            }
+          },
+          "osProfile": {
+            "computerNamePrefix": "[variables('RgNameClean')]",
+            "adminUsername": "[parameters('adminUsername')]",
+            "adminPassword": "[parameters('adminPassword')]"
+          },
+          "networkProfile": {
+            "networkInterfaceConfigurations": [
+              {
+                "name": "[concat(variables('vmssName'), '-nic')]",
+                "properties": {
+                  "primary": true,
+                  "ipConfigurations": [
+                    {
+                      "name": "ipconfig",
+                      "properties": {
+                        "subnet": {
+                          "id": "[variables('SubNet1Id')]"
+                        },
+                        "ApplicationGatewayBackendAddressPools": [
+                          {
+                            "id": "[concat(variables('AppGwId'), '/backendAddressPools/', variables('AppGwBEPoolName'))]"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
       }
     }
   ],

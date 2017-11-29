@@ -100,7 +100,18 @@ az storage blob show --container-name ${Source} --name ${Blob}
 az storage blob list --container-name ${Source} --output table
 ```
 
-#### Create a SQL Server DB
+### Get a SAS Token
+
+```bash
+az storage blob generate-sas \
+  --account-name ${StorageAccount} \
+  -c ${StorageContainer} \
+  -n ${StorageBlob} \
+  --permissions r \
+  --expiry 2018-01-01T00:00:00Z
+```
+
+### Create a SQL Server DB
 
 ```bash
 # Create a SQL Server

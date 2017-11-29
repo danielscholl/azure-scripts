@@ -130,11 +130,11 @@ DbName="AdventureWorks"
 DbSchema="AdventureWorksLT"
 
 az sql db create \
-	--resource-group ${ResourceGroup} \
-	--server ${ServerName} \
-	--name ${DbName} \
-	--sample-name ${DbSchema} \
-	--service-objective S0
+  --resource-group ${ResourceGroup} \
+  --server ${ServerName} \
+  --name ${DbName} \
+  --sample-name ${DbSchema} \
+  --service-objective S0
 ```
 
 #### Run a DSC Configuration on a Windows Server

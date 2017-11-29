@@ -100,6 +100,42 @@ az storage blob show --container-name ${Source} --name ${Blob}
 az storage blob list --container-name ${Source} --output table
 ```
 
+#### Create a SQL Server DB
+
+```bash
+# Create a SQL Server
+ServerName="dbServer-"$RANDOM
+Admin="ServerAdmin"
+Password="PasswordAzure@123!"  # Change as Needed
+
+az sql server create \
+  --name ${ServerName} \
+  --resource-group ${ResourceGroup} \
+  --location ${Location} \
+  --admin-user ${Admin} \
+  --admin-password ${Password}
+  
+# Configure a firewall rule for the server
+IP=$(curl ifconfig.me/ip)
+
+az sql server firewall-rule create \
+  --resource-group ${ResourceGroup} \
+  --server ${ServerName} \
+  -n $HOSTNAME \
+  --start-ip-address ${IP} \
+  --end-ip-address ${IP}
+
+# Configure a Database
+DbName="AdventureWorks"
+DbSchema="AdventureWorksLT"
+
+az sql db create \
+	--resource-group ${ResourceGroup} \
+	--server ${ServerName} \
+	--name ${DbName} \
+	--sample-name ${DbSchema} \
+	--service-objective S0
+```
 
 #### Run a DSC Configuration on a Windows Server
 

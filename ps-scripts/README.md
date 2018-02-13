@@ -1,4 +1,5 @@
-# Helpful PowerShell Snipperts
+
+[![Launch Cloud Shell](https://shell.azure.com/images/launchcloudshell.png "Launch Cloud Shell")](https://shell.azure.com)# Helpful PowerShell Snipperts
 
 ### General Items
 
@@ -23,6 +24,7 @@ Get-AzureRmSubscription
 $Subscription = 'MSDN'
 Set-AzureRmContext -SubscriptionName $Subscription
 ```
+[![Launch Cloud Shell](https://shell.azure.com/images/launchcloudshell.png "Launch Cloud Shell")](https://shell.azure.com/powershell)
 
 ### Resource Groups
 

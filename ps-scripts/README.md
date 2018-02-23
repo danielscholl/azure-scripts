@@ -480,3 +480,33 @@ Install-WindowsFeature -Name "Web-Server" -IncludeAllSubFeature -IncludeManageme
  New-AzureRmVmss -ResourceGroupName $rgName -Name $vmssName -VirtualMachineScaleSet $vmss
 ```
 
+#### Manage an Office 365 User in Azure AD
+```powershell
+# Install PowerShell Module
+Install-Module MSOnline
+
+# Login to MSOnline
+Connect-MsolService
+
+# Look at all your O365 Users
+Get-MsolUser
+
+# Look at your O365 Available Licenses
+Get-MsolAccountSku
+
+# Add a User and assign a license to it
+$License = "yourdomain:DEVELOPERPACK"
+
+New-MsolUser -LicenseAssignment cloudcodeit:DEVELOPERPACK -UsageLocation US `
+    -DisplayName "John Smith" `
+    -FirstName "John" `
+    -LastName "Smith" `
+    -UserPrincipalName "john.smith@yourdomain.com"
+
+# Validate User has been created and a license assigned
+Get-MsolUser -UserPrincipalName "john.smith@yourdomain.com"
+
+# Remove a user
+Remove-MsolUser -UserPrincipalName "john.smith@yourdomain.com
+```
+

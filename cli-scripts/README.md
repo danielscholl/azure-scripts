@@ -256,3 +256,42 @@ az group deployment create -g ${ResourceGroup} \
 
 
 ```
+
+### Deploy a Kubernetes Cluster
+
+```bash
+ResourceGroup="AKS"
+Location="eastus"
+ClusterName="AKS-Cluster"
+
+az group create --name ${ResourceGroup} \
+  --location ${Location}
+ 
+#Create the Cluster
+az aks create `
+  --name ${AKS_Cluster} `
+  --resource-group ${ResourceGroup} `
+  --node-count 1 `
+  --generate-ssh-keys `
+  --kubernetes-version 1.9.6
+  
+ # Get the Kubernetes Config
+ az aks get-credentials `
+  --name ${ClusterName} `
+  --resource-group ${ResourceGroup}
+
+# If needed install the Kubernetes CLI command
+az acs kubernetes install-cli
+
+# Add to %PATH% Environment Variables
+
+# Launch the Dashboard
+az aks browse `
+  --name ${ClusterName} `
+  --resource-group ${ResourceGroup}
+
+# Delete the Cluster
+az aks delete `
+  --name ${ClusterName} `
+  --resource-group ${ResourceGroup}
+```

@@ -1,12 +1,12 @@
 <# Copyright (c) 2017, cloudcodeit.com
 .Synopsis
-   Installs a Virtual Machine to an isolated Resource Group.
+   Installs a Virtual Machine to an isolated Resource Group.
 .DESCRIPTION
-   This script will install a virtual machine, Storage, Network
+   This script will install a virtual machine, Storage, Network
    into its own resource group. To ensure uniqueness you must pass
    a unique string parameter.
 .EXAMPLE
-   ./Create-VirtualMachine.ps1 <your_unique_string> <location> <vmname>
+   ./Create-VirtualMachine.ps1 <your_unique_string> <location> <vmname>
 #>
 
 param([string]$unique = $(throw "Unique Parameter required."),
@@ -15,8 +15,7 @@ param([string]$unique = $(throw "Unique Parameter required."),
   [string]$rgName = "$($unique)-$($name)")
 
 #Global Variables
-$image = "MicrosoftVisualStudio:VisualStudio:VS-2017-Comm-v152-Win10-N:latest"
-# $image = "MicrosoftWindowsServer:WindowsServer:2012-R2-Datacenter:latest"
+$image = "MicrosoftWindowsServer:WindowsServer:2012-R2-Datacenter:latest"
 $vmSize = "Standard_A1"
 # $date = Get-Date -format "yyyy-MM-dd-hh-mm-ss"
 
@@ -83,8 +82,14 @@ $vm = Set-AzureRmVMSourceImage -VM $vm `
   -Skus $sku `
   -Version $version
 
+
 $vm = Add-AzureRmVMNetworkInterface -VM $vm `
   -Id $nic.Id
+
+
+$dataDiskUri = $storageacc.PrimaryEndpoints.Blob.ToString() + "vhds/DataDisk.vhd"  #<-- Dependency On Storage Account
+
+Add-AzureRmVMDataDisk -VM $vm -Name 'DataDisk1' -Caching 'ReadOnly' -DiskSizeInGB 10 -Lun 0 -VhdUri $dataDiskUri -CreateOption Empty
 
 $vm = Set-AzureRmVMOSDisk -VM $vm `
   -Name "OsDisk" `
@@ -94,5 +99,3 @@ $vm = Set-AzureRmVMOSDisk -VM $vm `
 New-AzureRmVM -VM $vm `
   -ResourceGroupName $rgname `
   -Location $location
-
-Get-AzureRmVM -ResourceGroupName $rgName

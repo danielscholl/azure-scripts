@@ -26,10 +26,21 @@ az group create `
   --location $Location
 
 
+
+<#
+- Azure VNET can be as large as /8 but a cluster may only have 16,000 configured IP addresses
+- Subnet must be large enough to accomodate the nodes, pods, and all k8s and Azure resources 
+  that might be provisioned in the cluster.  ie: Load Balancer(s)
+
+  (number of nodes) + (number of nodes * pods per node)
+         (3)        +                (3*30)  = 93 IP Addresses     
+#>
+
 # Create a virtual network with a Container subnet.
 $VNet="k8s-vnet"
-$AddressPrefix="10.0.0.0/16"
-$ContainerTier="10.0.1.0/24"
+$AddressPrefix="10.0.0.0/16"    # 65,536 Addresses
+$ContainerTier="10.0.0.0/20"    # 4,096  Addresses
+
 
 az network vnet create `
     --name $VNet `
@@ -41,7 +52,7 @@ az network vnet create `
 
 
 # Create a virtual network with a Backend subnet.
-$BackendTier="10.0.2.0/24"
+$BackendTier="10.0.16.0/24"      # 254 Addresses
 
 az network vnet subnet create `
     --name BackendTier `
@@ -50,12 +61,20 @@ az network vnet subnet create `
     --vnet-name $VNet
 
 
+<#
+- ServiceCidr must be smaller then /12 and not used by any network element nor connected to VNET
+- DNSServiceIP used by kube-dns  typically .10 in the ServiceCIDR range.
+- DockerBridgeCidr used as the docker bridge IP address on nodes.  Default is typically used.
+
+MAX PODS PER NODE for advanced networking is 30!!
+#>
+
 # Create a Kubernetes Cluster on the Container subnet with RBAC.
-$Cluster="k8sCluster"
+$Cluster="k8s-cluster"
 $NodeSize="Standard_D3_v2"
 $DockerBridgeCidr="172.17.0.1/16"
-$ServiceCidr="10.25.0.0/16"
-$DNSServiceIP="10.25.0.10"
+$ServiceCidr="10.2.0.0/24"
+$DNSServiceIP="10.2.0.10"
 $SubnetId=$(az network vnet subnet show --resource-group $ResourceGroup --vnet-name $VNet --name ContainerTier --query id -otsv)
 
 # Source the Environment File containing Service Principal and Tenant information
@@ -77,4 +96,35 @@ az aks create --name $Cluster `
     --dns-service-ip $DNSServiceIP `
     --vnet-subnet-id $SubnetId `
     --network-plugin azure
+
+# Create the RBAC Binding
+az aks get-credentials --resource-group $ResourceGroup --name $Cluster --admin
+
+
+```
+
+Create the RBAC bindings necessary
+
+```powershell
+az aks get-credentials --resource-group $ResourceGroup --name $Cluster --admin
+$USER=$(az account show --query user.name -otsv)
+
+$yaml = @"
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-admins
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: User
+  name: "$($USER)"
+"@
+$yaml | Out-file cluster-admins.yaml
+
+kubectl create -f cluster-admins.yaml
+az aks get-credentials --resource-group $ResourceGroup --name $Cluster
 ```

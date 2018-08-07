@@ -106,6 +106,7 @@ az aks get-credentials --resource-group $ResourceGroup --name $Cluster --admin
 Create the RBAC bindings necessary
 
 ```powershell
+# Pull the cluster context as admin user
 az aks get-credentials --resource-group $ResourceGroup --name $Cluster --admin
 $USER=$(az account show --query user.name -otsv)
 
@@ -126,5 +127,7 @@ subjects:
 $yaml | Out-file cluster-admins.yaml
 
 kubectl create -f cluster-admins.yaml
+
+# Pull the context for non-admin user
 az aks get-credentials --resource-group $ResourceGroup --name $Cluster
 ```

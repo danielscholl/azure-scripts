@@ -210,9 +210,7 @@ $data = kubectl get secret $(kubectl get serviceaccount dashboard -o jsonpath="{
 [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($data))
 
 # azure cli doesn't work yet to get dashboard use the following method
-
 Start http://localhost:8001/api/v1/namespaces/kube-system/services/kubernetes-dashboard/proxy/#!/login
-
 kubectl proxy
 
 # Use the Token to login.

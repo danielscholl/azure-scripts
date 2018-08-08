@@ -36,7 +36,6 @@ az group create `
   --location $Location
 
 
-
 <#
 - Azure VNET can be as large as /8 but a cluster may only have 16,000 configured IP addresses
 - Subnet must be large enough to accomodate the nodes, pods, and all k8s and Azure resources 
@@ -220,4 +219,132 @@ Start http://localhost:8001/api/v1/namespaces/kube-system/services/kubernetes-da
 kubectl proxy
 
 # Use the Token to login.
+```
+
+
+Create a Container Registry to use with the Cluster
+
+```powershell
+function Get-UniqueString ([string]$id, $length=13)
+{
+    $hashArray = (new-object System.Security.Cryptography.SHA512Managed).ComputeHash($id.ToCharArray())
+    -join ($hashArray[1..$length] | ForEach-Object { [char]($_ % 26 + [byte][char]'a') })
+}
+$Unique=$(Get-UniqueString -id $(az group show --name $ResourceGroup --query id -otsv))
+$Registry="registry$Unique"
+
+# Create the Registry
+az acr create --resource-group $ResourceGroup --name $Registry --sku Basic
+
+# Login to the Registry
+az acr login --name $Registry
+
+az acr list --resource-group $ResourceGroup --query "[].{acrLoginServer:loginServer}" --output table
+```
+
+Create an Application and deploy it
+
+```powershell
+git clone https://github.com/Azure-Samples/azure-voting-app-redis.git src
+
+$yaml = @"
+version: '3'
+services:
+  azure-vote-back:
+    image: redis
+    container_name: azure-vote-back
+    ports:
+        - "6379:6379"
+
+  azure-vote-front:
+    build: ./src/azure-vote
+    image: $Registry.azurecr.io/azure-vote-front
+    container_name: azure-vote-front
+    environment:
+      REDIS: azure-vote-back
+    ports:
+        - "8080:80"
+"@
+$yaml | Out-file docker-compose.yaml
+
+docker-compose build
+docker-compose push
+
+# Prepare a Kube Manifest
+
+$yaml = @"
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: azure-vote-back
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: azure-vote-back
+    spec:
+      containers:
+      - name: azure-vote-back
+        image: redis
+        ports:
+        - containerPort: 6379
+          name: redis
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: azure-vote-back
+spec:
+  ports:
+  - port: 6379
+  selector:
+    app: azure-vote-back
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: azure-vote-front
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  minReadySeconds: 5 
+  template:
+    metadata:
+      labels:
+        app: azure-vote-front
+    spec:
+      containers:
+      - name: azure-vote-front
+        image: $Registry.azurecr.io/azure-vote-front
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 250m
+          limits:
+            cpu: 500m
+        env:
+        - name: REDIS
+          value: "azure-vote-back"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: azure-vote-front
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+  selector:
+    app: azure-vote-front
+"@
+$yaml | Out-file manifest.yaml
+
+# Deploy it to the cluster
+kubectl apply -f manifest.yaml
+kubectl get service azure-vote-front --watch  # Wait for the External IP to come live
 ```

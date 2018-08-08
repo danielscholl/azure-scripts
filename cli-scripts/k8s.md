@@ -214,4 +214,6 @@ $data = kubectl get secret $(kubectl get serviceaccount dashboard -o jsonpath="{
 Start http://localhost:8001/api/v1/namespaces/kube-system/services/kubernetes-dashboard/proxy/#!/login
 
 kubectl proxy
+
+# Use the Token to login.
 ```

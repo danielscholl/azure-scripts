@@ -196,8 +196,14 @@ kubectl create -f cluster-admin-group.yaml
 az aks get-credentials --resource-group $ResourceGroup --name $Cluster
 
 # Excercise commands using AD credentials
-kubectl get nodes  # Check your nodes
 kubectl get pods --all-namespaces   # Check your pods
+
+
+<#
+- RBAC is in Preview and not all things are synced up yet and completed.
+- Standard way of browsing to the dashboard doesn't work.  Must use a Token Login
+- The token login mechanism bypasses the RBAC as it isn't using the clusterrolebinding created above :-(
+#>
 
 
 # Enable Dashboard Login with Token

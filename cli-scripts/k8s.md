@@ -5,6 +5,16 @@ Create a .env.ps1 file with the following settings as defined in the Tutorial Do
 
 [https://docs.microsoft.com/en-us/azure/aks/aad-integration](https://docs.microsoft.com/en-us/azure/aks/aad-integration)
 
+
+>Important things to note:
+
+1. Follow the instructions "VERY" carefully.
+2. Ensure you select Grant Permissions on both the Server Principal and the Client Principal
+3. Only "Member" users will be supported and not "Guest" users
+
+Track the Open Issue.
+[RBAC AAD access error](https://github.com/Azure/AKS/issues/478)
+
 ```powershell
 ## Sample Environment File
 $Env:AZURE_AKSAADServerId = ""                  # Desired Service Principal Server Id
@@ -68,18 +78,57 @@ az network vnet subnet create `
 
 MAX PODS PER NODE for advanced networking is 30!!
 #>
+```
 
-# Create a Kubernetes Cluster on the Container subnet with RBAC.
-$Cluster="k8s-cluster"
+
+Deploy and validate a Kubernetes Cluster without RBAC
+>NOTE: Optional 
+
+```powershell
 $NodeSize="Standard_D3_v2"
 $DockerBridgeCidr="172.17.0.1/16"
-$ServiceCidr="10.2.0.0/24"
-$DNSServiceIP="10.2.0.10"
 $SubnetId=$(az network vnet subnet show --resource-group $ResourceGroup --vnet-name $VNet --name ContainerTier --query id -otsv)
 
-# Source the Environment File containing Service Principal and Tenant information
+# Deploy a cluster without RBAC
+$Cluster="k8s-cluster-noRBAC"
+$ServiceCidr="10.3.0.0/24"
+$DNSServiceIP="10.3.0.10"
+az aks create --name $Cluster `
+    --resource-group $ResourceGroup `
+    --location $Location `
+    --disable-rbac `
+    --generate-ssh-keys `
+    --node-vm-size $NodeSize `
+    --node-count 1 `
+    --docker-bridge-address $DockerBridgeCidr `
+    --service-cidr $ServiceCidr `
+    --dns-service-ip $DNSServiceIP `
+    --vnet-subnet-id $SubnetId `
+    --network-plugin azure
+
+az aks get-credentials --resource-group $ResourceGroup --name $Cluster
+kubectl get nodes  # Check your nodes
+kubectl get pods --all-namespaces   # Check your pods
+
+az aks browse --resource-group $ResourceGroup --name $Cluster  # Open the dashboard
+```
+
+
+
+Deploy and validate the Kubernetes Cluster with RBAC
+
+```powershell
+$NodeSize="Standard_D3_v2"
+$DockerBridgeCidr="172.17.0.1/16"
+$SubnetId=$(az network vnet subnet show --resource-group $ResourceGroup --vnet-name $VNet --name ContainerTier --query id -otsv)
+
+# Source the Service Principal Environment File
 . ./.env.ps1
 
+# Deploy a cluster with RBAC
+$Cluster="k8s-cluster-RBAC"
+$ServiceCidr="10.2.0.0/24"
+$DNSServiceIP="10.2.0.10"
 az aks create --name $Cluster `
     --resource-group $ResourceGroup `
     --location $Location `
@@ -97,37 +146,72 @@ az aks create --name $Cluster `
     --vnet-subnet-id $SubnetId `
     --network-plugin azure
 
-# Create the RBAC Binding
+# Pull the cluster admin context
 az aks get-credentials --resource-group $ResourceGroup --name $Cluster --admin
 
-
-```
-
-Create the RBAC bindings necessary
-
-```powershell
-# Pull the cluster context as admin user
-az aks get-credentials --resource-group $ResourceGroup --name $Cluster --admin
+# Option 1: Single AD User Assignment
 $USER=$(az account show --query user.name -otsv)
-
 $yaml = @"
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: cluster-admins
+  name: singleuser-cluster-admin
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: cluster-admin
+  name: admin
 subjects:
 - apiGroup: rbac.authorization.k8s.io
   kind: User
   name: "$($USER)"
 "@
-$yaml | Out-file cluster-admins.yaml
+$yaml | Out-file cluster-admin-user.yaml
+kubectl create -f cluster-admin-user.yaml
 
-kubectl create -f cluster-admins.yaml
 
-# Pull the context for non-admin user
+# Option 2: AD Group Assignment
+$USER=$(az account show --query user.name -otsv)
+$USER_ID=$(az ad user show --upn-or-object-id $USER --query objectId -otsv)
+$GROUP=$(az ad group create --display-name "k8s admin" --mail-nickname "NotSet" --query objectId -otsv)
+az ad group member add --group $GROUP --member-id $USER_ID
+
+$yaml = @"
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+ name: cluster-admins
+roleRef:
+ apiGroup: rbac.authorization.k8s.io
+ kind: ClusterRole
+ name: admin
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: "$($Group)"
+"@
+$yaml | Out-file cluster-admin-group.yaml
+kubectl create -f cluster-admin-group.yaml
+
+# Pull the cluster context for rbac users
 az aks get-credentials --resource-group $ResourceGroup --name $Cluster
+
+# Excercise commands using AD credentials
+kubectl get nodes  # Check your nodes
+kubectl get pods --all-namespaces   # Check your pods
+
+
+# Enable Dashboard Login with Token
+az aks get-credentials --resource-group $ResourceGroup --name $Cluster --admin
+kubectl create serviceaccount dashboard
+kubectl create clusterrolebinding dashboard-admin --clusterrole=admin --serviceaccount=default:dashboard
+
+$data = kubectl get secret $(kubectl get serviceaccount dashboard -o jsonpath="{.secrets[0].name}") -o jsonpath="{.data.token}"
+# Copy the output of this text to use as the TOKEN
+[System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($data))
+
+# azure cli doesn't work yet to get dashboard use the following method
+
+Start http://localhost:8001/api/v1/namespaces/kube-system/services/kubernetes-dashboard/proxy/#!/login
+
+kubectl proxy
 ```

@@ -1,10 +1,11 @@
 
 # Instructions
 
-__Create a Resource Group__
-This resource group will be used to hold all our resources
-
 >NOTE: Assumes CLI Version = azure-cli (2.0.43)  ** Required RBAC changes
+
+
+## Create a Resource Group
+This resource group will be used to hold all our resources
 
 ```powershell
 $ResourceGroup="k8s"
@@ -21,50 +22,73 @@ function Get-UniqueString ([string]$id, $length=13)
     $hashArray = (new-object System.Security.Cryptography.SHA512Managed).ComputeHash($id.ToCharArray())
     -join ($hashArray[1..$length] | ForEach-Object { [char]($_ % 26 + [byte][char]'a') })
 }
-$Unique=$(Get-UniqueString -id $(az group show --name $ResourceGroup --query id -otsv))
+
+$Unique=$(Get-UniqueString -id $(az group show `
+                                  --name $ResourceGroup `
+                                  --query id -otsv))
 ```
 
 
-__Create a Service Principal__
-This Service Principal is required to allow Clusters to access the container registry.
+## Create a Service Principal
+This Service Principal is used by the cluster to control access to Azure Resources such as registry and Network. 
 
 ```powershell
 $PrincipalName = "AKS-$Unique"
-$PrincipalSecret = $(az ad sp create-for-rbac --skip-assignment --name $PrincipalName --query password -otsv)
-$PrincipalId = $(az ad sp list --display-name $PrincipalName --query [].appId -otsv)
+
+$PrincipalSecret = $(az ad sp create-for-rbac `
+                      --name $PrincipalName `
+                      --skip-assignment `
+                      --query password -otsv)
+
+$PrincipalId = $(az ad sp list `
+                  --display-name $PrincipalName `
+                  --query [].appId -otsv)
 ```
 
 
-__Create a Container Registry__
-Create a Container Registry to host images for the cluster and allow Service Principal Access.
+## Create a Container Registry
+This private Container Registry hosts images to be used by the cluster.
 
 ```powershell
 $Registry="registry$Unique"
 
 # Create the Registry
-$RegistryServer = $(az acr create --resource-group $ResourceGroup --name $Registry --sku Basic --query loginServer -otsv)
+$RegistryServer = $(az acr create `
+                     --name $Registry `
+                     --resource-group $ResourceGroup `
+                     --sku Basic `
+                     --query loginServer -otsv)
 
-# Allow Service Principal Read Access to the Registry
-## LOGGED IN USER MUST HAVE OWNER RIGHTS ON THE SUBSCRIPTION TO DO THIS
-$RegistryId = $(az acr show --name $Registry --resource-group $ResourceGroup --query "id" --output tsv)
-az role assignment create --assignee $PrincipalId  --scope $RegistryId --role Reader
+$RegistryId = $(az acr show `
+                 --name $Registry `
+                 --resource-group $ResourceGroup `
+                 --query id -ostv)
+
+# Grant Service Principal Read Access to the Registry
+## CLI USER MUST HAVE OWNER RIGHTS ON THE SUBSCRIPTION TO DO THIS
+az role assignment create `
+  --assignee $PrincipalId `
+  --scope $RegistryId `
+  --role Reader
 
 # Login to the Registry
-az acr login --name $Registry
+az acr login `
+  --name $Registry
 ```
 
 
-__Create an Application Image__
+## Containerize and push an application to the registry
 Download an application build the docker images and push it to the private registry and deploy a k8s manifest.
 
 ```powershell
 # Clone a Sample Application
 git clone https://github.com/Azure-Samples/azure-voting-app-redis.git src
 
-# Create a Compose File
+# Create a Compose File for the App
 @"
 version: '3'
 services:
+
   azure-vote-back:
     image: redis
     container_name: azure-vote-back
@@ -81,11 +105,11 @@ services:
         - "8080:80"
 "@ | Out-file docker-compose.yaml
 
-# Create the application image and push it to the registry
+# Build and push the Docker Images
 docker-compose build
 docker-compose push
 
-# Create a Kubernetes Deployment Manifest
+# Create a k8s manifest file for the Ap;p
 @"
 apiVersion: apps/v1beta1
 kind: Deployment
@@ -158,59 +182,66 @@ spec:
 "@ | Out-file deployment.yaml
 ```
 
+## Create a Kubernetes Cluster
 
-__Option A: Create a Basic Kubernetes Cluster__
-Create a bare bones Kubernetes Cluster and deploy the application to it.
+### Option A -- __Create a Basic Kubernetes Cluster__
 
->Note: A Basic Kubernetes Cluster now has RBAC on by default.
->Burstable Machines can be used to save money for non-prod clusters.  [Documentation](https://azure.microsoft.com/en-us/blog/introducing-burstable-vm-support-in-aks/)
+This is a bare bones kubernetes cluster with an application deployed and has RBAC enabled by default.
+
+
+>Note: A Basic Kubernetes Cluster has RBAC enabled by default.  
+>[Burstable](https://azure.microsoft.com/en-us/blog/introducing-burstable-vm-support-in-aks/) machine types are great for saving money on non-prod clusters.
 
 ```powershell
 $Cluster="k8s-cluster"
 $NodeSize="Standard_B2S"
 
 # Create the Registry
-az aks create --name $Cluster `
-    --resource-group $ResourceGroup `
-    --location $Location `
-    --generate-ssh-keys `
-    --node-vm-size $NodeSize `
-    --node-count 1 `
-    --service-principal $PrincipalId `
-    --client-secret $PrincipalSecret
+az aks create `
+  --name $Cluster `
+  --resource-group $ResourceGroup `
+  --location $Location `
+  --generate-ssh-keys `
+  --node-vm-size $NodeSize `
+  --node-count 1 `
+  --service-principal $PrincipalId `
+  --client-secret $PrincipalSecret
 
-# Pull down the kubeconfig Credentials
-az aks get-credentials --resource-group $ResourceGroup --name $Cluster
+# Pull the credential context
+az aks get-credentials `
+  --name $Cluster `
+  --resource-group $ResourceGroup 
 
-# Validate Communication to the Cluster
+# Validate the cluster
 kubectl get nodes  
 kubectl get pods --all-namespaces   
 
-# Deploy the application to the cluster
+# Deploy to the cluster
 kubectl apply -f deployment.yaml
 kubectl get service azure-vote-front --watch  # Wait for the External IP to come live
 
-
-# Give the k8s dashboard Admin Rights by expanding the service account authorization
+# Expand the dashboard access rights
 kubectl create clusterrolebinding kubernetes-dashboard `
-    -n default `
-    --clusterrole=cluster-admin `
-    --serviceaccount=kube-system:kubernetes-dashboard
+  -n default `
+  --clusterrole=cluster-admin `
+  --serviceaccount=kube-system:kubernetes-dashboard
 
-az aks browse --resource-group $ResourceGroup --name $Cluster  # Open the dashboard
-
-
-# Alternately Enable Token Login Access for Dashboard **More Secure  (No Access via Dashboard to Pods)
+# Open the dashboard
+az aks browse `
+  --name $Cluster `
+  --resource-group $ResourceGroup   
 
 # ---------------------------------- #
 #  THIS IS NOT WORKING RIGHT NOW!!!  #
 # ---------------------------------- #
 
+# Alternately Enable Token Login Access for Dashboard **More Secure  (No Access via Dashboard to Pods)
+
 # Create a Dashboard Service Account
 kubectl create serviceaccount dashboard -n default
 kubectl create clusterrolebinding dashboard-admin -n default --clusterrole=cluster-admin --serviceaccount=default:dashboard
 
-# Startup the Dashboard Proxy and Browser
+# Startup the Dashboard Proxy and open the dashboard login
 Start-Process kubectl proxy
 Start http://localhost:8001/api/v1/namespaces/kube-system/services/kubernetes-dashboard/proxy/#!/login
 
@@ -220,8 +251,7 @@ $data = kubectl get secret $(kubectl get serviceaccount dashboard -o jsonpath="{
 [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($data)) | clip
 ```
 
-
-__Option B: Create a Basic Kubernetes Cluster with AAD RBAC__
+### Option B -- __Create a Kubernetes Cluster with RBAC AAD integration__
 
 Create a .env.ps1 file with the following settings as defined in the Tutorial Document
 
@@ -234,50 +264,47 @@ Create a .env.ps1 file with the following settings as defined in the Tutorial Do
 2. Ensure you select Grant Permissions on both the Server Principal and the Client Principal
 3. Only "Member" users will be supported and not "Guest" users
 
-Track the Open Issue.
-[RBAC AAD access error](https://github.com/Azure/AKS/issues/478)
+Track the Open Issue:  [RBAC AAD access error](https://github.com/Azure/AKS/issues/478)
 
+__Create a private environment file__
 
 ```powershell
-## Sample Environment File
-$Env:AZURE_AKSAADServerId = ""                  # Desired Service Principal Server Id
-$Env:AZURE_AKSAADServerSecret = ""              # Desired Service Princiapl Server Key
-$Env:AZURE_AKSAADClientId = ""                  # Desired Service Princiapl Client Id
-$Env:AZURE_TENANT = ""                          # Desired Tenant Id
+## Sample Environment File  (.env.ps1)
+$Env:AZURE_AKSAADServerId = ""         # Desired Service Principal Server Id
+$Env:AZURE_AKSAADServerSecret = ""     # Desired Service Princiapl Server Key
+$Env:AZURE_AKSAADClientId = ""         # Desired Service Princiapl Client Id
+$Env:AZURE_TENANT = ""                 # Desired Tenant Id
 ```
 
-
-Deploy and validate the Kubernetes Cluster with RBAC
+__Deploy and validate the Kubernetes Cluster__
 
 ```powershell
 $Cluster="k8s-cluster-aad"
 $NodeSize="Standard_B2s"
 
-# Source the Service Principal Environment File
+# Source the Private Environment File
 . ./.env.ps1
 
 # Create the Cluster
-az aks create --name $Cluster `
-    --resource-group $ResourceGroup `
-    --location $Location `
-    --generate-ssh-keys `
-    --node-vm-size $NodeSize `
-    --node-count 1 `
-    --service-principal $PrincipalId `
-    --client-secret $PrincipalSecret `
-    --aad-server-app-id $env:AZURE_AKSAADServerId  `
-    --aad-server-app-secret $env:AZURE_AKSAADServerSecret  `
-    --aad-client-app-id $env:AZURE_AKSAADClientId  `
-    --aad-tenant-id $env:AZURE_TENANT 
+az aks create `
+  --name $Cluster `
+  --resource-group $ResourceGroup `
+  --location $Location `
+  --generate-ssh-keys `
+  --node-vm-size $NodeSize `
+  --node-count 1 `
+  --service-principal $PrincipalId `
+  --client-secret $PrincipalSecret `
+  --aad-server-app-id $env:AZURE_AKSAADServerId  `
+  --aad-server-app-secret $env:AZURE_AKSAADServerSecret  `
+  --aad-client-app-id $env:AZURE_AKSAADClientId  `
+  --aad-tenant-id $env:AZURE_TENANT 
 
 # Pull the cluster admin context
-az aks get-credentials --resource-group $ResourceGroup --name $Cluster --admin
-
-<#
-- RBAC is in Preview and it seems not all things are synced up yet and completed.
-- Standard way of browsing to the dashboard doesn't work.  Must use a Token Login
-- The token login mechanism bypasses the RBAC as it isn't using the clusterrolebinding created above :-(
-#>
+az aks get-credentials `
+  --name $Cluster `
+  --resource-group $ResourceGroup `
+  --admin
 
 # Give the k8s dashboard Admin Rights by expanding the service account authorization
 kubectl create clusterrolebinding kubernetes-dashboard `
@@ -291,7 +318,9 @@ kubectl create -f cluster-admin-group.yaml
 
 
 # Pull the cluster context
-az aks get-credentials --resource-group $ResourceGroup --name $Cluster
+az aks get-credentials `
+  --name $Cluster `
+  --resource-group $ResourceGroup 
 
 # Excercise commands
 kubectl get pods --all-namespaces   # Allowed for the user
@@ -302,13 +331,16 @@ kubectl apply -f deployment.yaml
 kubectl get service azure-vote-front --watch  # Wait for the External IP to come live
 
 # Open the dashboard
-az aks browse --resource-group $ResourceGroup --name $Cluster
+az aks browse `
+  --name $Cluster `
+  --resource-group $ResourceGroup 
 ```
 
 
 
+### Option C -- __Create an Advanced Network Kubernetes Cluster__
 
-__Create a Virtual Network that can be used with a Kubernetes Cluster__
+__Create a Virtual Network__
 
 ```powershell
 <#
@@ -352,16 +384,19 @@ MAX PODS PER NODE for advanced networking is 30!!
 #>
 
 # Allow Service Principal Owner Access to the Network
-$SubnetId=$(az network vnet subnet show --resource-group $ResourceGroup --vnet-name $VNet --name ContainerTier --query id -otsv)
-az role assignment create --assignee $PrincipalId  --scope $SubnetId --role Contributor
+$SubnetId=$(az network vnet subnet show `
+  --resource-group $ResourceGroup `
+  --vnet-name $VNet `
+  --name ContainerTier `
+  --query id -otsv)
+
+az role assignment create `
+  --assignee $PrincipalId `
+  --scope $SubnetId `
+  --role Contributor
 ```
 
-
-__Option C: Create an Advanced Network Kubernetes Cluster__
->Note: Requires the Virutal Network
-
-Create a  Kubernetes Cluster integrated with a custom vnet and deploy the application to it.
-
+__Create the integrated Cluster__
 
 ```powershell
 $NodeSize="Standard_D3_v2"

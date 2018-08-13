@@ -162,11 +162,12 @@ spec:
 __Option A: Create a Basic Kubernetes Cluster__
 Create a bare bones Kubernetes Cluster and deploy the application to it.
 
->Note: A Basic Kubernetes Cluster now has RBAC on by default
+>Note: A Basic Kubernetes Cluster now has RBAC on by default.
+>Burstable Machines can be used to save money for non-prod clusters.  [Documentation](https://azure.microsoft.com/en-us/blog/introducing-burstable-vm-support-in-aks/)
 
 ```powershell
 $Cluster="k8s-cluster"
-$NodeSize="Standard_D3_v2"
+$NodeSize="Standard_B2S"
 
 # Create the Registry
 az aks create --name $Cluster `
@@ -185,7 +186,7 @@ az aks get-credentials --resource-group $ResourceGroup --name $Cluster
 kubectl get nodes  
 kubectl get pods --all-namespaces   
 
-# Deploy it to the cluster
+# Deploy the application to the cluster
 kubectl apply -f deployment.yaml
 kubectl get service azure-vote-front --watch  # Wait for the External IP to come live
 
@@ -199,9 +200,11 @@ kubectl create clusterrolebinding kubernetes-dashboard `
 az aks browse --resource-group $ResourceGroup --name $Cluster  # Open the dashboard
 
 
-# Enable Token Login Access for Dashboard
-# OPTION B: More Secure  (No Access via Dashboard to Pods)
-## NOT WORKING RIGHT NOW!!! ##
+# Alternately Enable Token Login Access for Dashboard **More Secure  (No Access via Dashboard to Pods)
+
+# ---------------------------------- #
+#  THIS IS NOT WORKING RIGHT NOW!!!  #
+# ---------------------------------- #
 
 # Create a Dashboard Service Account
 kubectl create serviceaccount dashboard -n default
@@ -218,42 +221,7 @@ $data = kubectl get secret $(kubectl get serviceaccount dashboard -o jsonpath="{
 ```
 
 
-
-Deploy and validate a Basic non networked Kubernetes Cluster without RBAC
->NOTE: Optional 
-
-```powershell
-$NodeSize="Standard_D3_v2"
-$DockerBridgeCidr="172.17.0.1/16"
-$SubnetId=$(az network vnet subnet show --resource-group $ResourceGroup --vnet-name $VNet --name ContainerTier --query id -otsv)
-
-# Deploy a cluster without RBAC
-$Cluster="k8s-cluster-noRBAC"
-$ServiceCidr="10.3.0.0/24"
-$DNSServiceIP="10.3.0.10"
-az aks create --name $Cluster `
-    --resource-group $ResourceGroup `
-    --location $Location `
-    --disable-rbac `
-    --generate-ssh-keys `
-    --node-vm-size $NodeSize `
-    --node-count 1 `
-    --docker-bridge-address $DockerBridgeCidr `
-    --service-cidr $ServiceCidr `
-    --dns-service-ip $DNSServiceIP `
-    --vnet-subnet-id $SubnetId `
-    --network-plugin azure
-
-az aks get-credentials --resource-group $ResourceGroup --name $Cluster
-kubectl get nodes  # Check your nodes
-kubectl get pods --all-namespaces   # Check your pods
-
-az aks browse --resource-group $ResourceGroup --name $Cluster  # Open the dashboard
-```
-
-
-
-
+__Option B: Create a Basic Kubernetes Cluster with AAD RBAC__
 
 Create a .env.ps1 file with the following settings as defined in the Tutorial Document
 
@@ -279,18 +247,70 @@ $Env:AZURE_TENANT = ""                          # Desired Tenant Id
 ```
 
 
+Deploy and validate the Kubernetes Cluster with RBAC
+
 ```powershell
-# Assumes CLI Version = azure-cli (2.0.43)
+$Cluster="k8s-cluster-aad"
+$NodeSize="Standard_B2s"
 
-$ResourceGroup="k8s"
-$Location="eastus"
+# Source the Service Principal Environment File
+. ./.env.ps1
 
-# Create a resource group.
-az group create `
-  --name $ResourceGroup `
-  --location $Location
+# Create the Cluster
+az aks create --name $Cluster `
+    --resource-group $ResourceGroup `
+    --location $Location `
+    --generate-ssh-keys `
+    --node-vm-size $NodeSize `
+    --node-count 1 `
+    --service-principal $PrincipalId `
+    --client-secret $PrincipalSecret `
+    --aad-server-app-id $env:AZURE_AKSAADServerId  `
+    --aad-server-app-secret $env:AZURE_AKSAADServerSecret  `
+    --aad-client-app-id $env:AZURE_AKSAADClientId  `
+    --aad-tenant-id $env:AZURE_TENANT 
+
+# Pull the cluster admin context
+az aks get-credentials --resource-group $ResourceGroup --name $Cluster --admin
+
+<#
+- RBAC is in Preview and it seems not all things are synced up yet and completed.
+- Standard way of browsing to the dashboard doesn't work.  Must use a Token Login
+- The token login mechanism bypasses the RBAC as it isn't using the clusterrolebinding created above :-(
+#>
+
+# Give the k8s dashboard Admin Rights by expanding the service account authorization
+kubectl create clusterrolebinding kubernetes-dashboard `
+    -n default `
+    --clusterrole=cluster-admin `
+    --serviceaccount=kube-system:kubernetes-dashboard
+
+# AD User Assignment
+kubectl create -f aduser-cluster-admin.yaml
+kubectl create -f cluster-admin-group.yaml
 
 
+# Pull the cluster context
+az aks get-credentials --resource-group $ResourceGroup --name $Cluster
+
+# Excercise commands
+kubectl get pods --all-namespaces   # Allowed for the user
+kubectl get nodes                   # Rejected by the user
+
+# Deploy the application to the cluster
+kubectl apply -f deployment.yaml
+kubectl get service azure-vote-front --watch  # Wait for the External IP to come live
+
+# Open the dashboard
+az aks browse --resource-group $ResourceGroup --name $Cluster
+```
+
+
+
+
+__Create a Virtual Network that can be used with a Kubernetes Cluster__
+
+```powershell
 <#
 - Azure VNET can be as large as /8 but a cluster may only have 16,000 configured IP addresses
 - Subnet must be large enough to accomodate the nodes, pods, and all k8s and Azure resources 
@@ -304,7 +324,6 @@ az group create `
 $VNet="k8s-vnet"
 $AddressPrefix="10.0.0.0/16"    # 65,536 Addresses
 $ContainerTier="10.0.0.0/20"    # 4,096  Addresses
-
 
 az network vnet create `
     --name $VNet `
@@ -324,7 +343,6 @@ az network vnet subnet create `
     --resource-group $ResourceGroup `
     --vnet-name $VNet
 
-
 <#
 - ServiceCidr must be smaller then /12 and not used by any network element nor connected to VNET
 - DNSServiceIP used by kube-dns  typically .10 in the ServiceCIDR range.
@@ -334,8 +352,12 @@ MAX PODS PER NODE for advanced networking is 30!!
 #>
 ```
 
-Deploy and validate a Kubernetes Cluster without RBAC
->NOTE: Optional 
+
+__Option C: Create an Advanced Network Kubernetes Cluster__
+>Note: Requires the Virutal Network
+
+Create a  Kubernetes Cluster integrated with a custom vnet and deploy the application to it.
+
 
 ```powershell
 $NodeSize="Standard_D3_v2"
@@ -343,247 +365,77 @@ $DockerBridgeCidr="172.17.0.1/16"
 $SubnetId=$(az network vnet subnet show --resource-group $ResourceGroup --vnet-name $VNet --name ContainerTier --query id -otsv)
 
 # Deploy a cluster without RBAC
-$Cluster="k8s-cluster-noRBAC"
+$Cluster="k8s-cluster-network"
 $ServiceCidr="10.3.0.0/24"
 $DNSServiceIP="10.3.0.10"
+
+# Create the Cluster
 az aks create --name $Cluster `
     --resource-group $ResourceGroup `
     --location $Location `
-    --disable-rbac `
     --generate-ssh-keys `
     --node-vm-size $NodeSize `
     --node-count 1 `
-    --docker-bridge-address $DockerBridgeCidr `
-    --service-cidr $ServiceCidr `
-    --dns-service-ip $DNSServiceIP `
-    --vnet-subnet-id $SubnetId `
-    --network-plugin azure
-
-az aks get-credentials --resource-group $ResourceGroup --name $Cluster
-kubectl get nodes  # Check your nodes
-kubectl get pods --all-namespaces   # Check your pods
-
-az aks browse --resource-group $ResourceGroup --name $Cluster  # Open the dashboard
-```
-
-
-
-Deploy and validate the Kubernetes Cluster with RBAC
-
-```powershell
-$NodeSize="Standard_D3_v2"
-$DockerBridgeCidr="172.17.0.1/16"
-$SubnetId=$(az network vnet subnet show --resource-group $ResourceGroup --vnet-name $VNet --name ContainerTier --query id -otsv)
-
-# Source the Service Principal Environment File
-. ./.env.ps1
-
-# Deploy a cluster with RBAC
-$Cluster="k8s-cluster-RBAC"
-$ServiceCidr="10.2.0.0/24"
-$DNSServiceIP="10.2.0.10"
-az aks create --name $Cluster `
-    --resource-group $ResourceGroup `
-    --location $Location `
-    --enable-rbac `
+    --service-principal $PrincipalId `
+    --client-secret $PrincipalSecret `
     --aad-server-app-id $env:AZURE_AKSAADServerId  `
     --aad-server-app-secret $env:AZURE_AKSAADServerSecret  `
     --aad-client-app-id $env:AZURE_AKSAADClientId  `
     --aad-tenant-id $env:AZURE_TENANT `
-    --generate-ssh-keys `
-    --node-vm-size $NodeSize `
-    --node-count 1 `
     --docker-bridge-address $DockerBridgeCidr `
     --service-cidr $ServiceCidr `
     --dns-service-ip $DNSServiceIP `
     --vnet-subnet-id $SubnetId `
-    --network-plugin azure
+    --network-plugin azure 
 
 # Pull the cluster admin context
 az aks get-credentials --resource-group $ResourceGroup --name $Cluster --admin
 
-# Option 1: Single AD User Assignment
-$USER=$(az account show --query user.name -otsv)
-$yaml = @"
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: singleuser-cluster-admin
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: admin
-subjects:
-- apiGroup: rbac.authorization.k8s.io
-  kind: User
-  name: "$($USER)"
-"@
-$yaml | Out-file cluster-admin-user.yaml
-kubectl create -f cluster-admin-user.yaml
-
-
-# Option 2: AD Group Assignment
-$USER=$(az account show --query user.name -otsv)
-$USER_ID=$(az ad user show --upn-or-object-id $USER --query objectId -otsv)
-$GROUP=$(az ad group create --display-name "k8s admin" --mail-nickname "NotSet" --query objectId -otsv)
-az ad group member add --group $GROUP --member-id $USER_ID
-
-$yaml = @"
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
- name: cluster-admins
-roleRef:
- apiGroup: rbac.authorization.k8s.io
- kind: ClusterRole
- name: admin
-subjects:
-- apiGroup: rbac.authorization.k8s.io
-  kind: Group
-  name: "$($Group)"
-"@
-$yaml | Out-file cluster-admin-group.yaml
-kubectl create -f cluster-admin-group.yaml
-
-# Pull the cluster context for rbac users
-az aks get-credentials --resource-group $ResourceGroup --name $Cluster
-
-# Excercise commands using AD credentials
-kubectl get pods --all-namespaces   # Check your pods
-
-
 <#
-- RBAC is in Preview and not all things are synced up yet and completed.
+- RBAC is in Preview and it seems not all things are synced up yet and completed.
 - Standard way of browsing to the dashboard doesn't work.  Must use a Token Login
 - The token login mechanism bypasses the RBAC as it isn't using the clusterrolebinding created above :-(
 #>
 
+# Give the k8s dashboard Admin Rights by expanding the service account authorization
+kubectl create clusterrolebinding kubernetes-dashboard `
+    -n default `
+    --clusterrole=cluster-admin `
+    --serviceaccount=kube-system:kubernetes-dashboard
 
-# Enable Dashboard Login with Token
-az aks get-credentials --resource-group $ResourceGroup --name $Cluster --admin
-kubectl create serviceaccount dashboard
-kubectl create clusterrolebinding dashboard-admin --clusterrole=admin --serviceaccount=default:dashboard
+# AD User Assignment
+kubectl create -f aduser-cluster-admin.yaml
+kubectl create -f cluster-admin-group.yaml
 
-$data = kubectl get secret $(kubectl get serviceaccount dashboard -o jsonpath="{.secrets[0].name}") -o jsonpath="{.data.token}"
-# Copy the output of this text to use as the TOKEN
-[System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($data))
-
-# azure cli doesn't work yet to get dashboard use the following method
-Start http://localhost:8001/api/v1/namespaces/kube-system/services/kubernetes-dashboard/proxy/#!/login
-kubectl proxy
-
-# Use the Token to login.
-```
-
-
-
-
-
-
-
-Create an Application and deploy it
-
-```powershell
-git clone https://github.com/Azure-Samples/azure-voting-app-redis.git src
-
-$yaml = @"
-version: '3'
-services:
-  azure-vote-back:
-    image: redis
-    container_name: azure-vote-back
-    ports:
-        - "6379:6379"
-
-  azure-vote-front:
-    build: ./src/azure-vote
-    image: $Registry.azurecr.io/azure-vote-front
-    container_name: azure-vote-front
-    environment:
-      REDIS: azure-vote-back
-    ports:
-        - "8080:80"
-"@
-$yaml | Out-file docker-compose.yaml
-
-docker-compose build
-docker-compose push
-
-# Prepare a Kube Manifest
-
-$yaml = @"
-apiVersion: apps/v1beta1
-kind: Deployment
-metadata:
-  name: azure-vote-back
-spec:
-  replicas: 1
-  template:
-    metadata:
-      labels:
-        app: azure-vote-back
-    spec:
-      containers:
-      - name: azure-vote-back
-        image: redis
-        ports:
-        - containerPort: 6379
-          name: redis
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: azure-vote-back
-spec:
-  ports:
-  - port: 6379
-  selector:
-    app: azure-vote-back
----
-apiVersion: apps/v1beta1
-kind: Deployment
-metadata:
-  name: azure-vote-front
-spec:
-  replicas: 1
-  strategy:
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 1
-  minReadySeconds: 5 
-  template:
-    metadata:
-      labels:
-        app: azure-vote-front
-    spec:
-      containers:
-      - name: azure-vote-front
-        image: $Registry.azurecr.io/azure-vote-front
-        ports:
-        - containerPort: 80
-        resources:
-          requests:
-            cpu: 250m
-          limits:
-            cpu: 500m
-        env:
-        - name: REDIS
-          value: "azure-vote-back"
----
+# Deploy an internal Load Balancer
+@"
 apiVersion: v1
 kind: Service
 metadata:
   name: azure-vote-front
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
 spec:
   type: LoadBalancer
   ports:
   - port: 80
   selector:
     app: azure-vote-front
-"@
-$yaml | Out-file manifest.yaml
+"@ | Out-file loadbalancer.yaml
+kubectl apply -f loadbalancer.yaml
+
+
+# Pull down the kubeconfig Credentials
+az aks get-credentials --resource-group $ResourceGroup --name $Cluster
+
+# Validate Communication to the Cluster
+kubectl get pods --all-namespaces
+
+
 
 # Deploy it to the cluster
-kubectl apply -f manifest.yaml
+kubectl apply -f deployment.yaml
 kubectl get service azure-vote-front --watch  # Wait for the External IP to come live
+
+az aks browse --resource-group $ResourceGroup --name $Cluster  # Open the dashboard
 ```

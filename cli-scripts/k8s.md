@@ -350,6 +350,10 @@ az network vnet subnet create `
 
 MAX PODS PER NODE for advanced networking is 30!!
 #>
+
+# Allow Service Principal Owner Access to the Network
+$SubnetId=$(az network vnet subnet show --resource-group $ResourceGroup --vnet-name $VNet --name ContainerTier --query id -otsv)
+az role assignment create --assignee $PrincipalId  --scope $SubnetId --role Contributor
 ```
 
 
@@ -361,11 +365,8 @@ Create a  Kubernetes Cluster integrated with a custom vnet and deploy the applic
 
 ```powershell
 $NodeSize="Standard_D3_v2"
-$DockerBridgeCidr="172.17.0.1/16"
-$SubnetId=$(az network vnet subnet show --resource-group $ResourceGroup --vnet-name $VNet --name ContainerTier --query id -otsv)
-
-# Deploy a cluster without RBAC
 $Cluster="k8s-cluster-network"
+$DockerBridgeCidr="172.17.0.1/16"
 $ServiceCidr="10.3.0.0/24"
 $DNSServiceIP="10.3.0.10"
 
@@ -378,37 +379,77 @@ az aks create --name $Cluster `
     --node-count 1 `
     --service-principal $PrincipalId `
     --client-secret $PrincipalSecret `
-    --aad-server-app-id $env:AZURE_AKSAADServerId  `
-    --aad-server-app-secret $env:AZURE_AKSAADServerSecret  `
-    --aad-client-app-id $env:AZURE_AKSAADClientId  `
-    --aad-tenant-id $env:AZURE_TENANT `
+    --disable-rbac `
+    --network-plugin azure `
     --docker-bridge-address $DockerBridgeCidr `
     --service-cidr $ServiceCidr `
     --dns-service-ip $DNSServiceIP `
     --vnet-subnet-id $SubnetId `
-    --network-plugin azure 
+    --enable-addons http_application_routing
 
 # Pull the cluster admin context
 az aks get-credentials --resource-group $ResourceGroup --name $Cluster --admin
 
-<#
-- RBAC is in Preview and it seems not all things are synced up yet and completed.
-- Standard way of browsing to the dashboard doesn't work.  Must use a Token Login
-- The token login mechanism bypasses the RBAC as it isn't using the clusterrolebinding created above :-(
-#>
-
-# Give the k8s dashboard Admin Rights by expanding the service account authorization
-kubectl create clusterrolebinding kubernetes-dashboard `
-    -n default `
-    --clusterrole=cluster-admin `
-    --serviceaccount=kube-system:kubernetes-dashboard
-
-# AD User Assignment
-kubectl create -f aduser-cluster-admin.yaml
-kubectl create -f cluster-admin-group.yaml
-
 # Deploy an internal Load Balancer
 @"
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: azure-vote-back
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: azure-vote-back
+    spec:
+      containers:
+      - name: azure-vote-back
+        image: redis
+        ports:
+        - containerPort: 6379
+          name: redis
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: azure-vote-back
+spec:
+  ports:
+  - port: 6379
+  selector:
+    app: azure-vote-back
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: azure-vote-front
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  minReadySeconds: 5 
+  template:
+    metadata:
+      labels:
+        app: azure-vote-front
+    spec:
+      containers:
+      - name: azure-vote-front
+        image: registrymmpknpadipove.azurecr.io/azure-vote-front
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 250m
+          limits:
+            cpu: 500m
+        env:
+        - name: REDIS
+          value: "azure-vote-back"
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -421,17 +462,7 @@ spec:
   - port: 80
   selector:
     app: azure-vote-front
-"@ | Out-file loadbalancer.yaml
-kubectl apply -f loadbalancer.yaml
-
-
-# Pull down the kubeconfig Credentials
-az aks get-credentials --resource-group $ResourceGroup --name $Cluster
-
-# Validate Communication to the Cluster
-kubectl get pods --all-namespaces
-
-
+"@ | Out-file deployment.yaml
 
 # Deploy it to the cluster
 kubectl apply -f deployment.yaml

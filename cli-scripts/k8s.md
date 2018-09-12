@@ -62,7 +62,7 @@ $RegistryServer = $(az acr create `
 $RegistryId = $(az acr show `
                  --name $Registry `
                  --resource-group $ResourceGroup `
-                 --query id -ostv)
+                 --query id -otsv)
 
 # Grant Service Principal Read Access to the Registry
 ## CLI USER MUST HAVE OWNER RIGHTS ON THE SUBSCRIPTION TO DO THIS
@@ -194,7 +194,7 @@ This is a bare bones kubernetes cluster with an application deployed and has RBA
 
 ```powershell
 $Cluster="k8s-cluster"
-$NodeSize="Standard_B2S"
+$NodeSize="Standard_B2s"
 
 # Create the Registry
 az aks create `

@@ -1,9 +1,7 @@
-# Helpful Azure CLI Snippets
+# Helpful Azure CLI IoT Snippets
 
-### General Items
+### Creating a IoT Hub
 
-
-__Creating a IoT Hub__
 
 ```bash
 ResourceGroup="IoTtest" Location="eastus"
@@ -18,7 +16,7 @@ az iot hub create --resource-group $ResourceGroup --location $Location --name $H
 az iot hub device-identity create --hub-name $Hub --device-id $Device
 ```
 
-__Sending D2C Messages__
+### Sending D2C Messages
 
 _Monitor IoT Hub Events in Terminal Window 1_
 
@@ -43,7 +41,7 @@ az iot device simulate --hub-name $Hub --device-id $Device \
     --data "Hello Hub"
 ```
 
-__Sending C2D Messages__
+### Sending C2D Messages
 
 _Monitor IoT Hub Events in Terminal Window 1_
 
@@ -66,7 +64,7 @@ az iot device c2d-message send --hub-name $Hub --device-id $Device \
 ```
 
 
-__Simulating a Device__
+### Simulating a Device
 
 _Monitor IoT Hub Events in Terminal Window 1_
 
